@@ -213,10 +213,16 @@ function WheelPage({ mode, data, setData, addHistory }) {
     setSlotItems(["?", "?", "?"]);
   };
 
-  const saveTemplate = (name) => {
-    // If name already exists — overwrite with current items; if new — create blank template
+  const handleNew = (name) => {
+    const nextTemplates = { ...templates, [name]: [] };
+    setData((currentData) => ({ ...currentData, [templateKey]: nextTemplates }));
+    setActiveTemplate(name);
+    setItems([]);
+    setSavedSnapshot(JSON.stringify([]));
+  };
+
+  const handleSave = (name) => {
     const nextTemplates = { ...templates, [name]: [...cleanItems] };
-    setItems(cleanItems);
     setData((currentData) => ({ ...currentData, [templateKey]: nextTemplates }));
     setActiveTemplate(name);
     setSavedSnapshot(JSON.stringify(cleanItems));
@@ -279,7 +285,7 @@ function WheelPage({ mode, data, setData, addHistory }) {
         </Card>
       </div>
       <div className="space-y-5">
-        <TemplatePicker title={isFood ? "店铺模板" : "人名模板"} templates={templates} activeName={activeTemplate} isDirty={isDirty} onChoose={chooseTemplate} onSave={saveTemplate} onDelete={deleteTemplate} />
+        <TemplatePicker title={isFood ? "店铺模板" : "人名模板"} templates={templates} activeName={activeTemplate} isDirty={isDirty} onChoose={chooseTemplate} onNew={handleNew} onSave={handleSave} onDelete={deleteTemplate} />
         <OptionEditor items={items} setItems={setItems} placeholder={isFood ? "添加店名，比如 海底捞" : "添加人名，比如 小明"} foodTemplates={data.foodTemplates} peopleTemplates={data.peopleTemplates} />
       </div>
     </div>

@@ -28,14 +28,21 @@ function Button({ children, className = "", variant = "primary", disabled = fals
   );
 }
 
-export default function TemplatePicker({ title, templates, activeName, isDirty, onChoose, onSave, onDelete }) {
+export default function TemplatePicker({ title, templates, activeName, isDirty, onChoose, onNew, onSave, onDelete }) {
   const [newName, setNewName] = useState("");
   const templateNames = Object.keys(templates);
+
+  const handleNew = () => {
+    const name = newName.trim();
+    if (!name) return;
+    onNew(name);
+    setNewName("");
+  };
 
   const handleSave = () => {
     const name = newName.trim();
     if (!name) return;
-    onSave(name); // should create blank template with this name
+    onSave(name);
     setNewName("");
   };
 
@@ -73,11 +80,17 @@ export default function TemplatePicker({ title, templates, activeName, isDirty, 
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSave();
             }}
-            placeholder="新模板名，例如：周末聚餐"
+            placeholder="输入模板名"
             className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-violet-400"
           />
-          <Button onClick={handleSave} variant="purple" className="shrink-0">
-            <Icon>💾</Icon>新建
+        </div>
+
+        <div className="flex gap-2">
+          <Button onClick={handleNew} variant="soft" className="flex-1">
+            <Icon>✨</Icon>空白新建
+          </Button>
+          <Button onClick={handleSave} variant="purple" className="flex-1">
+            <Icon>💾</Icon>保存当前
           </Button>
         </div>
 
