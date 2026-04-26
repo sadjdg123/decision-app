@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { sanitizeItems, totalWeight, getWheelLabelPosition } from "../utils";
 
-export default function Wheel({ items, spinning, selected, rotation, onSpin }) {
+export default function Wheel({ items, spinning, selected, rotation, onSpin, justStopped }) {
   const cleanItems = useMemo(() => sanitizeItems(items), [items]);
   const safeItems = cleanItems.length ? cleanItems : [{ name: "请添加选项", weight: 1 }];
   const itemsKey = safeItems.map((item) => `${item.name}:${item.weight}`).join("|");
@@ -26,39 +26,84 @@ export default function Wheel({ items, spinning, selected, rotation, onSpin }) {
   const verticalText = safeItems.length >= 8;
 
   return (
-    <div className="relative mx-auto flex h-72 w-72 items-center justify-center sm:h-80 sm:w-80">
-      <div className="absolute -top-1 z-30 h-0 w-0 border-l-[14px] border-r-[14px] border-t-[30px] border-l-transparent border-r-transparent border-t-violet-600 drop-shadow-lg" />
-      <div
-        className="relative h-full w-full rounded-full border-[14px] border-white shadow-2xl transition-transform duration-[3600ms] ease-out"
-        style={{ background: `conic-gradient(${background})`, transform: `rotate(${rotation}deg)` }}
-      >
-        <div className="absolute inset-0 rounded-full ring-1 ring-black/5" />
-        <div className="absolute inset-3 rounded-full border-2 border-white/50" />
-        {segments.map((segment, index) => {
-          const position = getWheelLabelPosition(segment.start, segment.size, labelRadius);
-          return (
-            <div
-              key={`${segment.name}-${index}`}
-              className="absolute left-1/2 top-1/2 flex h-16 w-24 items-center justify-center text-center text-xs font-black text-white drop-shadow-md sm:text-sm"
-              style={{ transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px) rotate(${position.readableAngle}deg)` }}
-            >
-              <span className="max-w-[88px] leading-tight" style={{ writingMode: verticalText ? "vertical-rl" : "horizontal-tb" }}>
-                {segment.name}
-              </span>
+    <div className="space-y-4">
+      {/* Probability bar */}
+      {weightTotal > 0 && safeItems[0]?.name !== "请添加选项" && (
+        <div className="space-y-1">
+          {safeItems.map((item, index) => (
+            <div key={`${item.name}-${index}`} className="flex items-center gap-2 text-xs">
+              <span className="w-20 truncate text-right text-slate-600">{item.name}</span>
+              <div className="flex-1 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-2 rounded-full transition-all duration-500"
+                  style={{
+                    width: `${Math.max(4, (item.weight / weightTotal) * 100)}%`,
+                    background: segments[index]?.color || `hsl(${(index * 47 + 255) % 360} 82% 62%)`,
+                  }}
+                />
+              </div>
+              <span className="w-10 text-left font-mono text-slate-500">{((item.weight / weightTotal) * 100).toFixed(0)}%</span>
             </div>
-          );
-        })}
-        <div className="absolute left-1/2 top-1/2 h-[112px] w-[112px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[12px] border-white bg-white" />
+          ))}
+        </div>
+      )}
+
+      {/* Wheel */}
+      <div className="relative mx-auto flex h-72 w-72 items-center justify-center sm:h-80 sm:w-80">
+        <div className="absolute -top-1 z-30 h-0 w-0 border-l-[14px] border-r-[14px] border-t-[30px] border-l-transparent border-r-transparent border-t-violet-600 drop-shadow-lg" />
+        <div
+          className={`
+            relative h-full w-full rounded-full border-[14px] border-white shadow-2xl
+            transition-transform
+            ${spinning ? "duration-[3600ms] ease-out" : "duration-500"}
+            ${justStopped ? "scale-[1.02]" : "scale-100"}
+          `}
+          style={{
+            background: `conic-gradient(${background})`,
+            transform: `rotate(${rotation}deg)`,
+            // Subtle overshoot curve when stopping
+            transitionTimingFunction: spinning
+              ? "cubic-bezier(0.2, 0.8, 0.3, 1)"
+              : "ease-out",
+          }}
+        >
+          <div className="absolute inset-0 rounded-full ring-1 ring-black/5" />
+          <div className="absolute inset-3 rounded-full border-2 border-white/50" />
+          {segments.map((segment, index) => {
+            const position = getWheelLabelPosition(segment.start, segment.size, labelRadius);
+            return (
+              <div
+                key={`${segment.name}-${index}`}
+                className="absolute left-1/2 top-1/2 flex h-16 w-24 items-center justify-center text-center text-xs font-black text-white drop-shadow-md sm:text-sm"
+                style={{ transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px) rotate(${position.readableAngle}deg)` }}
+              >
+                <span className="max-w-[88px] leading-tight" style={{ writingMode: verticalText ? "vertical-rl" : "horizontal-tb" }}>
+                  {segment.name}
+                </span>
+              </div>
+            );
+          })}
+          <div className="absolute left-1/2 top-1/2 h-[112px] w-[112px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[12px] border-white bg-white" />
+        </div>
+
+        {/* Center button — glows when just stopped */}
+        <button
+          type="button"
+          onClick={onSpin}
+          disabled={!cleanItems.length || spinning}
+          className={`
+            absolute z-20 flex h-24 w-24 flex-col items-center justify-center rounded-full
+            bg-violet-600 text-center text-white shadow-xl
+            transition-all duration-300
+            hover:bg-violet-700
+            disabled:cursor-not-allowed disabled:opacity-80
+            ${justStopped ? "scale-110 shadow-violet-400 shadow-2xl ring-4 ring-violet-300 ring-opacity-60" : ""}
+          `}
+        >
+          <span className="text-xs text-white/75">结果</span>
+          <span className="max-w-[72px] truncate text-lg font-black">{spinning ? "..." : selected || "开始"}</span>
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={onSpin}
-        disabled={!cleanItems.length || spinning}
-        className="absolute z-20 flex h-24 w-24 flex-col items-center justify-center rounded-full bg-violet-600 text-center text-white shadow-xl transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-80"
-      >
-        <span className="text-xs text-white/75">结果</span>
-        <span className="max-w-[72px] truncate text-lg font-black">{spinning ? "..." : selected || "开始"}</span>
-      </button>
     </div>
   );
 }

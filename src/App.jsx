@@ -206,6 +206,7 @@ function WheelPage({ mode, data, setData, addHistory }) {
   const [items, setItems] = useState(initialItems);
   const [selected, setSelected] = useState("");
   const [spinning, setSpinning] = useState(false);
+  const [justStopped, setJustStopped] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [slotItems, setSlotItems] = useState(["?", "?", "?"]);
   const [tryCount, setTryCount] = useState(0);
@@ -248,7 +249,10 @@ function WheelPage({ mode, data, setData, addHistory }) {
     setSelected(result);
     setPendingResult({ type, result });
     setTryCount((count) => count + 1);
+    setJustStopped(true);
     triggerVibration([30, 40, 30]);
+    // Auto-clear the glow after 1.5s
+    setTimeout(() => setJustStopped(false), 1500);
   };
 
   const confirmResult = () => {
@@ -373,7 +377,7 @@ function WheelPage({ mode, data, setData, addHistory }) {
               <p className="mt-1 text-sm text-slate-500">支持人数越多，扇区越大，被抽中的概率越高。</p>
             </div>
             {isFood ? (
-              <Wheel items={cleanItems} spinning={spinning} selected={selected} rotation={rotation} onSpin={spin} />
+              <Wheel items={cleanItems} spinning={spinning} selected={selected} rotation={rotation} onSpin={spin} justStopped={justStopped} />
             ) : (
               <div className="mx-auto max-w-md rounded-3xl bg-slate-950 p-5 shadow-2xl">
                 <div className="mb-4 text-center text-sm font-bold text-white/70">老虎机模式</div>
