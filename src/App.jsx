@@ -1,180 +1,28 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { STORAGE_KEY, SPIN_DURATION, SLOT_INTERVAL, DICE_INTERVAL, MAX_HISTORY, MAX_WEIGHT, defaultData, tabs } from "./constants";
-
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function clampWeight(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return 1;
-  return Math.max(1, Math.min(MAX_WEIGHT, Math.round(number)));
-}
-
-function sanitizeItem(item) {
-  if (typeof item === "string") {
-    const name = item.trim();
-    return name ? { name, weight: 1 } : null;
-  }
-
-  if (!isPlainObject(item)) return null;
-
-  const name = typeof item.name === "string" ? item.name.trim() : "";
-  if (!name) return null;
-
-  return { name, weight: clampWeight(item.weight) };
-}
-
-function sanitizeItems(items) {
-  if (!Array.isArray(items)) return [];
-
-  const map = new Map();
-  items.forEach((item) => {
-    const clean = sanitizeItem(item);
-    if (!clean) return;
-
-    const existing = map.get(clean.name);
-    if (existing) {
-      map.set(clean.name, { name: clean.name, weight: Math.min(MAX_WEIGHT, existing.weight + clean.weight) });
-    } else {
-      map.set(clean.name, clean);
-    }
-  });
-
-  return Array.from(map.values());
-}
-
-function sanitizeTemplateMap(value, fallback) {
-  if (!isPlainObject(value)) return fallback;
-
-  const entries = Object.entries(value)
-    .filter(([name, list]) => typeof name === "string" && name.trim() && Array.isArray(list))
-    .map(([name, list]) => [name.trim(), sanitizeItems(list)])
-    .filter(([, list]) => list.length > 0);
-
-  return entries.length ? Object.fromEntries(entries) : fallback;
-}
-
-function normalizeHistory(history) {
-  if (!Array.isArray(history)) return [];
-
-  return history
-    .filter((item) => isPlainObject(item) && typeof item.result === "string" && item.result.trim())
-    .map((item) => ({
-      type: typeof item.type === "string" && item.type.trim() ? item.type.trim() : "记录",
-      result: item.result.trim(),
-      time: typeof item.time === "string" && item.time.trim() ? item.time : new Date().toISOString()
-    }))
-    .slice(0, MAX_HISTORY);
-}
-
-function normalizeData(value) {
-  return {
-    foodTemplates: sanitizeTemplateMap(value?.foodTemplates, defaultData.foodTemplates),
-    peopleTemplates: sanitizeTemplateMap(value?.peopleTemplates, defaultData.peopleTemplates),
-    history: normalizeHistory(value?.history)
-  };
-}
-
-function loadData() {
-  if (typeof window === "undefined") return defaultData;
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? normalizeData(JSON.parse(raw)) : defaultData;
-  } catch {
-    return defaultData;
-  }
-}
-
-function saveData(data) {
-  if (typeof window === "undefined") return false;
-
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeData(data)));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function totalWeight(cleanItems) {
-  return cleanItems.reduce((sum, item) => sum + item.weight, 0);
-}
-
-function weightedNames(cleanItems) {
-  return cleanItems.flatMap((item) => Array(item.weight).fill(item.name));
-}
-
-function pickWeightedIndex(cleanItems, weightTotal = totalWeight(cleanItems)) {
-  if (!weightTotal) return -1;
-
-  let cursor = Math.floor(Math.random() * weightTotal);
-  for (let index = 0; index < cleanItems.length; index += 1) {
-    cursor -= cleanItems[index].weight;
-    if (cursor < 0) return index;
-  }
-
-  return cleanItems.length - 1;
-}
-
-function pickWeightedName(cleanItems, weightTotal = totalWeight(cleanItems)) {
-  const index = pickWeightedIndex(cleanItems, weightTotal);
-  return index >= 0 ? cleanItems[index].name : "";
-}
-
-function rollDiceValue() {
-  return Math.floor(Math.random() * 6) + 1;
-}
-
-function mod360(value) {
-  return ((value % 360) + 360) % 360;
-}
-
-function getWheelLabelPosition(angleStart, angleSize, radius) {
-  const labelAngle = angleStart + angleSize / 2;
-  const radians = (labelAngle * Math.PI) / 180;
-  const readableAngle = labelAngle > 90 && labelAngle < 270 ? labelAngle + 180 : labelAngle;
-
-  return {
-    labelAngle,
-    readableAngle,
-    x: Math.sin(radians) * radius,
-    y: -Math.cos(radians) * radius
-  };
-}
-
-function getFinalRotationForTarget(currentRotation, targetCenterAngle) {
-  const desiredRotation = mod360(-targetCenterAngle);
-  const delta = mod360(desiredRotation - mod360(currentRotation));
-  return currentRotation + 1440 + delta;
-}
-
-function triggerVibration(pattern = 25) {
-  if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-    navigator.vibrate(pattern);
-  }
-}
-
-function formatTime(value) {
-  try {
-    return new Date(value).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return "刚刚";
-  }
-}
-
-function runSelfTests() {
-  const sample = sanitizeItems([{ name: "A", weight: 3 }]);
-  console.assert(weightedNames(sample).length === 3, "weightedNames should expand weights");
-  console.assert(pickWeightedIndex(sample) === 0, "pickWeightedIndex should pick the only item");
-  console.assert(pickWeightedName(sample) === "A", "pickWeightedName should pick the only item name");
-  console.assert(rollDiceValue() >= 1 && rollDiceValue() <= 6, "rollDiceValue should be from 1 to 6");
-  console.assert(mod360(getFinalRotationForTarget(0, 30)) === 330, "target center 30 degrees should align under top pointer");
-  console.assert(sanitizeItems([{ name: " A ", weight: 2 }, { name: "A", weight: 3 }])[0].weight === 5, "duplicate item weights should merge");
-  console.assert(sanitizeItems([{ name: "A", weight: 99 }])[0].weight === MAX_WEIGHT, "weights should be clamped");
-  console.assert(normalizeHistory([{ type: "吃什么", result: " 麦当劳 ", time: "2026-01-01T00:00:00.000Z" }])[0].result === "麦当劳", "history should be normalized");
-}
+import {
+  isPlainObject,
+  clampWeight,
+  sanitizeItem,
+  sanitizeItems,
+  sanitizeTemplateMap,
+  normalizeHistory,
+  normalizeData,
+  loadData,
+  saveData,
+  totalWeight,
+  weightedNames,
+  pickWeightedIndex,
+  pickWeightedName,
+  rollDiceValue,
+  mod360,
+  getWheelLabelPosition,
+  getFinalRotationForTarget,
+  triggerVibration,
+  formatTime,
+  runSelfTests,
+} from "./utils";
+import DicePage from "./components/DicePage";
 
 function Button({ children, className = "", variant = "primary", disabled = false, ...props }) {
   const base = "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
@@ -699,59 +547,6 @@ function CoinPage({ addHistory }) {
         </div>
         <Button onClick={flip} disabled={flipping} variant="purple" className="h-12 w-full max-w-sm rounded-2xl text-base">
           <Icon>🪙</Icon>{flipping ? "金币翻转中..." : "抛一次"}
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function DicePage({ addHistory }) {
-  const [value, setValue] = useState(1);
-  const [rolling, setRolling] = useState(false);
-  const rollIntervalRef = useRef(null);
-
-  useEffect(() => {
-    return () => {
-      if (rollIntervalRef.current) window.clearInterval(rollIntervalRef.current);
-    };
-  }, []);
-
-  const roll = () => {
-    if (rolling) return;
-
-    setRolling(true);
-    triggerVibration(25);
-    let count = 0;
-    let lastValue = value;
-
-    if (rollIntervalRef.current) window.clearInterval(rollIntervalRef.current);
-    rollIntervalRef.current = window.setInterval(() => {
-      lastValue = rollDiceValue();
-      setValue(lastValue);
-      count += 1;
-
-      if (count > 12) {
-        window.clearInterval(rollIntervalRef.current);
-        rollIntervalRef.current = null;
-        addHistory("掷骰子", String(lastValue));
-        triggerVibration([30, 40, 30]);
-        setRolling(false);
-      }
-    }, DICE_INTERVAL);
-  };
-
-  return (
-    <Card className="rounded-3xl bg-gradient-to-br from-white to-slate-100">
-      <CardContent className="flex min-h-[520px] flex-col items-center justify-center gap-8 p-8 text-center">
-        <div>
-          <h2 className="text-2xl font-black text-slate-900">掷骰子</h2>
-          <p className="mt-1 text-sm text-slate-500">适合小游戏、排序、临时惩罚规则。</p>
-        </div>
-        <div className={`flex h-56 w-56 items-center justify-center rounded-[48px] bg-white text-8xl font-black text-slate-900 shadow-2xl transition-transform ${rolling ? "rotate-6 scale-105" : "rotate-0 scale-100"}`}>
-          {value}
-        </div>
-        <Button onClick={roll} disabled={rolling} variant="purple" className="h-12 w-full max-w-sm rounded-2xl text-base">
-          <Icon>🎲</Icon>{rolling ? "掷出中..." : "掷一次"}
         </Button>
       </CardContent>
     </Card>
