@@ -25,6 +25,8 @@ import {
 import DicePage from "./components/DicePage";
 import CoinPage from "./components/CoinPage";
 import Wheel from "./components/Wheel";
+import OptionEditor from "./components/OptionEditor";
+import TemplatePicker from "./components/TemplatePicker";
 
 function Button({ children, className = "", variant = "primary", disabled = false, ...props }) {
   const base = "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
@@ -52,135 +54,6 @@ function CardContent({ children, className = "" }) {
 
 function Icon({ children, className = "" }) {
   return <span className={`inline-flex h-5 w-5 items-center justify-center leading-none ${className}`}>{children}</span>;
-}
-
-function TemplatePicker({ title, templates, activeName, isDirty, onChoose, onSave, onDelete }) {
-  const [newName, setNewName] = useState("");
-  const templateNames = Object.keys(templates);
-
-  const submit = () => {
-    const name = newName.trim();
-    if (!name) return;
-    onSave(name);
-    setNewName("");
-  };
-
-  return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="font-bold text-slate-900">{title}</h3>
-          <span className={`shrink-0 text-xs font-bold ${isDirty ? "text-amber-600" : "text-slate-500"}`}>{isDirty ? "当前模板未保存" : "已保存"}</span>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {templateNames.length > 0 ? (
-            templateNames.map((name) => (
-              <button
-                key={name}
-                type="button"
-                onClick={() => onChoose(name)}
-                className={`rounded-full px-3 py-2 text-sm font-medium transition ${activeName === name ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
-              >
-                {name}
-              </button>
-            ))
-          ) : (
-            <span className="rounded-full bg-slate-100 px-3 py-2 text-sm text-slate-500">暂无模板</span>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <input
-            value={newName}
-            onChange={(event) => setNewName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") submit();
-            }}
-            placeholder="新模板名，例如：周末聚餐"
-            className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-violet-400"
-          />
-          <Button onClick={submit} variant="purple" className="shrink-0">
-            <Icon>💾</Icon>保存
-          </Button>
-        </div>
-        {activeName && (
-          <Button variant="danger" onClick={() => onDelete(activeName)} className="w-full">
-            <Icon>🗑️</Icon>删除当前模板
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function OptionEditor({ items, setItems, placeholder }) {
-  const [text, setText] = useState("");
-
-  const addItem = () => {
-    const value = text.trim();
-    if (!value) return;
-    setItems(sanitizeItems([...items, { name: value, weight: 1 }]));
-    setText("");
-  };
-
-  const updateItem = (index, patch) => {
-    setItems((currentItems) => currentItems.map((item, itemIndex) => (itemIndex === index ? sanitizeItem({ ...item, ...patch }) || item : item)));
-  };
-
-  const removeItem = (index) => {
-    setItems((currentItems) => currentItems.filter((_, itemIndex) => itemIndex !== index));
-  };
-
-  return (
-    <Card>
-      <CardContent className="space-y-4 p-4">
-        <div>
-          <h3 className="font-bold text-slate-900">选项和支持人数</h3>
-          <p className="mt-1 text-xs text-slate-500">支持人数越多，扇区越大，被抽中的概率越高。</p>
-        </div>
-        <div className="flex gap-2">
-          <input
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") addItem();
-            }}
-            placeholder={placeholder}
-            className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-violet-400"
-          />
-          <Button onClick={addItem} variant="purple" className="shrink-0 px-3">
-            <Icon>＋</Icon>
-          </Button>
-        </div>
-        <div className="space-y-2">
-          {items.length > 0 ? (
-            items.map((item, index) => (
-              <div key={`${item.name}-${index}`} className="grid grid-cols-[1fr_76px_32px] items-center gap-2 rounded-2xl bg-slate-50 p-2">
-                <input
-                  value={item.name}
-                  onChange={(event) => updateItem(index, { name: event.target.value })}
-                  className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
-                />
-                <input
-                  type="number"
-                  min="1"
-                  max={MAX_WEIGHT}
-                  value={item.weight}
-                  onChange={(event) => updateItem(index, { weight: event.target.value })}
-                  className="rounded-xl border border-slate-200 bg-white px-2 py-2 text-center text-sm outline-none focus:border-violet-400"
-                  aria-label={`${item.name} 的支持人数`}
-                />
-                <button type="button" aria-label={`删除 ${item.name}`} onClick={() => removeItem(index)} className="rounded-xl p-2 text-red-500 hover:bg-red-50">
-                  ×
-                </button>
-              </div>
-            ))
-          ) : (
-            <span className="text-sm text-slate-400">还没有选项，先添加一个。</span>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
 }
 
 function AntiDecisionHint({ count, result }) {
@@ -341,9 +214,8 @@ function WheelPage({ mode, data, setData, addHistory }) {
   };
 
   const saveTemplate = (name) => {
-    if (!cleanItems.length) return;
-
-    const nextTemplates = { ...templates, [name]: cleanItems };
+    // If name already exists — overwrite with current items; if new — create blank template
+    const nextTemplates = { ...templates, [name]: [...cleanItems] };
     setItems(cleanItems);
     setData((currentData) => ({ ...currentData, [templateKey]: nextTemplates }));
     setActiveTemplate(name);
@@ -408,7 +280,7 @@ function WheelPage({ mode, data, setData, addHistory }) {
       </div>
       <div className="space-y-5">
         <TemplatePicker title={isFood ? "店铺模板" : "人名模板"} templates={templates} activeName={activeTemplate} isDirty={isDirty} onChoose={chooseTemplate} onSave={saveTemplate} onDelete={deleteTemplate} />
-        <OptionEditor items={items} setItems={setItems} placeholder={isFood ? "添加店名，比如 海底捞" : "添加人名，比如 小明"} />
+        <OptionEditor items={items} setItems={setItems} placeholder={isFood ? "添加店名，比如 海底捞" : "添加人名，比如 小明"} foodTemplates={data.foodTemplates} peopleTemplates={data.peopleTemplates} />
       </div>
     </div>
   );
