@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { DICE_INTERVAL } from "../constants";
-import { rollDiceValue, triggerVibration } from "../utils";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { triggerVibration } from "../utils";
 
 function Card({ children, className = "" }) {
   return <div className={`rounded-2xl bg-white shadow-sm ${className}`}>{children}</div>;
@@ -30,115 +29,165 @@ function Button({ children, className = "", variant = "primary", disabled = fals
   );
 }
 
-// Dice face dot positions: [top-left, top-right, center, bottom-left, bottom-right]
-const FACE_DOTS = {
+// Standard dice pip positions for each face value
+const FACE_PIPS = {
   1: ["center"],
-  2: ["top-right", "bottom-left"],
-  3: ["top-right", "center", "bottom-left"],
-  4: ["top-left", "top-right", "bottom-left", "bottom-right"],
-  5: ["top-left", "top-right", "center", "bottom-left", "bottom-right"],
-  6: ["top-left", "top-right", "middle-left", "middle-right", "bottom-left", "bottom-right"],
+  2: ["ne", "sw"],
+  3: ["ne", "center", "sw"],
+  4: ["nw", "ne", "sw", "se"],
+  5: ["nw", "ne", "center", "sw", "se"],
+  6: ["nw", "ne", "mw", "me", "sw", "se"],
 };
 
-function DiceFace({ value }) {
-  const dots = FACE_DOTS[value] || [];
-  return (
-    <div className="relative h-full w-full rounded-2xl bg-gradient-to-b from-white to-slate-100 shadow-inner">
-      <div
-        className="absolute inset-4 grid grid-cols-3 grid-rows-3 gap-1"
-        style={{ gridTemplateAreas: `"tl tr tr" "ml c cr" "bl bl br"` }}
-      >
-        {dots.map((pos) => {
-          let style = {};
-          if (pos === "center") style = { gridArea: "c", placeSelf: "center" };
-          else if (pos === "top-left") style = { gridArea: "tl", alignSelf: "start", justifySelf: "start" };
-          else if (pos === "top-right") style = { gridArea: "tr", alignSelf: "start", justifySelf: "end" };
-          else if (pos === "middle-left") style = { gridArea: "ml", alignSelf: "center", justifySelf: "start" };
-          else if (pos === "middle-right") style = { gridArea: "cr", alignSelf: "center", justifySelf: "end" };
-          else if (pos === "bottom-left") style = { gridArea: "bl", alignSelf: "end", justifySelf: "start" };
-          else if (pos === "bottom-right") style = { gridArea: "br", alignSelf: "end", justifySelf: "end" };
+const PIP_STYLES = {
+  nw:  { top: "12%", left: "12%" },
+  ne:  { top: "12%", right: "12%" },
+  center: { top: "50%", left: "50%", transform: "translate(-50%,-50%)" },
+  mw:  { top: "50%", left: "12%", transform: "translateY(-50%)" },
+  me:  { top: "50%", right: "12%", transform: "translateY(-50%)" },
+  sw:  { bottom: "12%", left: "12%" },
+  se:  { bottom: "12%", right: "12%" },
+};
 
-          return (
-            <div
-              key={pos}
-              className="h-6 w-6 rounded-full bg-slate-800 sm:h-8 sm:w-8"
-              style={style}
-            />
-          );
-        })}
+// Single dice face panel with pips
+function DicePanel({ value, faceColor = "bg-white" }) {
+  const pips = FACE_PIPS[value] || [];
+  return (
+    <div className={`relative h-full w-full rounded-xl ${faceColor} shadow-inner`}>
+      {pips.map((pos) => (
+        <div
+          key={pos}
+          className="absolute h-[18%] w-[18%] rounded-full bg-slate-800 shadow-sm"
+          style={PIP_STYLES[pos]}
+        />
+      ))}
+    </div>
+  );
+}
+
+// True 3D dice cube — shows 3 faces at once: front, right, top
+// Using CSS 3D transforms with perspective
+function Dice3D({ value, rolling, animProgress }) {
+  // Map value (1-6) to cube orientation so front face shows the right number
+  // We rotate the cube so the desired face ends up on "front"
+  // Cube has faces: front, back, left, right, top, bottom
+  const faceMap = {
+    // value -> cube transform to bring that face to front
+    1: "rotateY(0deg)",
+    2: "rotateY(-90deg)",
+    3: "rotateX(-90deg)",
+    4: "rotateX(90deg)",
+    5: "rotateY(90deg)",
+    6: "rotateY(180deg)",
+  };
+
+  // During rolling: spin the cube with deceleration easing
+  const rollingRotate = rolling
+    ? `rotateX(${animProgress * 720}deg) rotateY(${animProgress * 1080}deg) rotateZ(${animProgress * 360}deg)`
+    : faceMap[value] || faceMap[1];
+
+  return (
+    <div className="relative h-20 w-20 sm:h-24 sm:w-24" style={{ perspective: "400px" }}>
+      <div
+        className="relative h-full w-full"
+        style={{
+          transformStyle: "preserve-3d",
+          transition: rolling ? "none" : "transform 0.3s ease-out",
+          transform: rollingRotate,
+        }}
+      >
+        {/* Front face (1) */}
+        <div className="absolute inset-0" style={{ transform: "translateZ(40px)", backfaceVisibility: "hidden" }}>
+          <DicePanel value={1} />
+        </div>
+        {/* Right face (2) */}
+        <div className="absolute inset-0" style={{ transform: "rotateY(90deg) translateZ(40px)", backfaceVisibility: "hidden" }}>
+          <DicePanel value={2} />
+        </div>
+        {/* Top face (3) */}
+        <div className="absolute inset-0" style={{ transform: "rotateX(-90deg) translateZ(40px)", backfaceVisibility: "hidden" }}>
+          <DicePanel value={3} />
+        </div>
+        {/* Bottom face (4) */}
+        <div className="absolute inset-0" style={{ transform: "rotateX(90deg) translateZ(40px)", backfaceVisibility: "hidden" }}>
+          <DicePanel value={4} />
+        </div>
+        {/* Left face (5) */}
+        <div className="absolute inset-0" style={{ transform: "rotateY(-90deg) translateZ(40px)", backfaceVisibility: "hidden" }}>
+          <DicePanel value={5} />
+        </div>
+        {/* Back face (6) */}
+        <div className="absolute inset-0" style={{ transform: "rotateY(180deg) translateZ(40px)", backfaceVisibility: "hidden" }}>
+          <DicePanel value={6} />
+        </div>
       </div>
     </div>
   );
 }
 
-// 3D dice cube with CSS transforms
-function Dice3D({ value, rolling }) {
-  // Map value to face rotations
-  // We use a pseudo-3D cube approach with CSS transforms
-  // Show 3 visible faces: top/front/right by rotating the cube
-  const faceRotation = {
-    1: "rotateX(0deg) rotateY(0deg)",   // front face = 1
-    2: "rotateX(0deg) rotateY(90deg)",  // right face = 2
-    3: "rotateX(-90deg) rotateY(0deg)", // top face = 3
-    4: "rotateX(90deg) rotateY(0deg)",  // bottom face = 4
-    5: "rotateX(0deg) rotateY(-90deg)", // left face = 5
-    6: "rotateX(0deg) rotateY(180deg)", // back face = 6
-  };
-
-  const [displayValue, setDisplayValue] = useState(1);
-
-  useEffect(() => {
-    if (!rolling) {
-      setDisplayValue(value);
-    }
-  }, [value, rolling]);
-
+// Separate rolling cube — pure animation only, no final value shown until done
+function RollingDice3D({ animProgress }) {
   return (
-    <div className="relative h-52 w-52 perspective-[600px] sm:h-56 sm:w-56">
+    <div className="relative h-20 w-20 sm:h-24 sm:w-24" style={{ perspective: "400px" }}>
       <div
-        className="relative h-full w-full transition-transform duration-200"
+        className="relative h-full w-full"
         style={{
           transformStyle: "preserve-3d",
-          transform: faceRotation[displayValue],
+          transform: `rotateX(${animProgress * 720}deg) rotateY(${animProgress * 1080}deg) rotateZ(${animProgress * 360}deg)`,
         }}
       >
-        {/* Front face = 1 */}
-        <div className="absolute inset-0" style={{ transform: "translateZ(52px)", backfaceVisibility: "hidden" }}>
-          <DiceFace value={1} />
+        {/* Front */}
+        <div className="absolute inset-0" style={{ transform: "translateZ(40px)", backfaceVisibility: "hidden" }}>
+          <DicePanel value={1} />
         </div>
-        {/* Right face = 2 */}
-        <div className="absolute inset-0" style={{ transform: "rotateY(90deg) translateZ(52px)", backfaceVisibility: "hidden" }}>
-          <DiceFace value={2} />
+        {/* Right */}
+        <div className="absolute inset-0" style={{ transform: "rotateY(90deg) translateZ(40px)", backfaceVisibility: "hidden" }}>
+          <DicePanel value={2} />
         </div>
-        {/* Top face = 3 */}
-        <div className="absolute inset-0" style={{ transform: "rotateX(-90deg) translateZ(52px)", backfaceVisibility: "hidden" }}>
-          <DiceFace value={3} />
+        {/* Top */}
+        <div className="absolute inset-0" style={{ transform: "rotateX(-90deg) translateZ(40px)", backfaceVisibility: "hidden" }}>
+          <DicePanel value={3} />
         </div>
-        {/* Bottom face = 4 */}
-        <div className="absolute inset-0" style={{ transform: "rotateX(90deg) translateZ(52px)", backfaceVisibility: "hidden" }}>
-          <DiceFace value={4} />
+        {/* Bottom */}
+        <div className="absolute inset-0" style={{ transform: "rotateX(90deg) translateZ(40px)", backfaceVisibility: "hidden" }}>
+          <DicePanel value={4} />
         </div>
-        {/* Left face = 5 */}
-        <div className="absolute inset-0" style={{ transform: "rotateY(-90deg) translateZ(52px)", backfaceVisibility: "hidden" }}>
-          <DiceFace value={5} />
+        {/* Left */}
+        <div className="absolute inset-0" style={{ transform: "rotateY(-90deg) translateZ(40px)", backfaceVisibility: "hidden" }}>
+          <DicePanel value={5} />
         </div>
-        {/* Back face = 6 */}
-        <div className="absolute inset-0" style={{ transform: "rotateY(180deg) translateZ(52px)", backfaceVisibility: "hidden" }}>
-          <DiceFace value={6} />
+        {/* Back */}
+        <div className="absolute inset-0" style={{ transform: "rotateY(180deg) translateZ(40px)", backfaceVisibility: "hidden" }}>
+          <DicePanel value={6} />
         </div>
       </div>
     </div>
   );
+}
+
+// Easing function for smooth deceleration
+function easeOut(t) {
+  return 1 - Math.pow(1 - t, 3);
 }
 
 export default function DicePage({ addHistory }) {
-  const [value, setValue] = useState(1);
+  const [diceCount, setDiceCount] = useState(1);
+  const [values, setValues] = useState([1]);
   const [rolling, setRolling] = useState(false);
-  const rollIntervalRef = useRef(null);
+  const [animProgress, setAnimProgress] = useState(0);
+  const rollStartRef = useRef(null);
+  const rafRef = useRef(null);
+  const TOTAL_DURATION = 1050; // ms total animation
 
+  // Generate random dice values
+  const randomValues = useCallback((count) => {
+    return Array.from({ length: count }, () => Math.floor(Math.random() * 6) + 1);
+  }, []);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (rollIntervalRef.current) window.clearInterval(rollIntervalRef.current);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, []);
 
@@ -147,57 +196,112 @@ export default function DicePage({ addHistory }) {
 
     setRolling(true);
     triggerVibration(25);
+    setAnimProgress(0);
 
-    if (rollIntervalRef.current) window.clearInterval(rollIntervalRef.current);
-    rollIntervalRef.current = window.setInterval(() => {
-      const newValue = rollDiceValue();
-      setValue(newValue);
+    // Rapid random value updates during roll
+    const rapidInterval = setInterval(() => {
+      setValues(randomValues(diceCount));
+    }, 60);
 
-      if (rollIntervalRef.current.__count === undefined) rollIntervalRef.current.__count = 0;
-      rollIntervalRef.current.__count += 1;
+    const startTime = performance.now();
 
-      if (rollIntervalRef.current.__count > 12) {
-        window.clearInterval(rollIntervalRef.current);
-        rollIntervalRef.current = null;
-        const finalValue = newValue;
-        setValue(finalValue);
-        addHistory("掷骰子", String(finalValue));
-        triggerVibration([30, 40, 30]);
+    const animate = (now) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / TOTAL_DURATION, 1);
+      setAnimProgress(easeOut(progress));
+
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(animate);
+      } else {
+        clearInterval(rapidInterval);
+        // Set final values
+        const finalVals = randomValues(diceCount);
+        setValues(finalVals);
         setRolling(false);
+
+        // Write history
+        const sum = finalVals.reduce((a, b) => a + b, 0);
+        if (diceCount === 1) {
+          addHistory("掷骰子", String(sum));
+        } else {
+          addHistory("掷骰子", finalVals.join(" + ") + " = " + sum);
+        }
+        triggerVibration([30, 40, 30]);
       }
-    }, DICE_INTERVAL);
+    };
+
+    rafRef.current = requestAnimationFrame(animate);
   };
+
+  const changeDiceCount = (delta) => {
+    if (rolling) return;
+    const next = Math.max(1, Math.min(6, diceCount + delta));
+    if (next === diceCount) return;
+    setDiceCount(next);
+    setValues(Array(next).fill(1));
+  };
+
+  const sum = values.reduce((a, b) => a + b, 0);
 
   return (
     <Card className="rounded-3xl bg-gradient-to-br from-white to-slate-100">
-      <CardContent className="flex min-h-[520px] flex-col items-center justify-center gap-8 p-8 text-center">
+      <CardContent className="flex min-h-[560px] flex-col items-center justify-center gap-6 p-8 text-center">
         <div>
           <h2 className="text-2xl font-black text-slate-900">掷骰子</h2>
           <p className="mt-1 text-sm text-slate-500">适合小游戏、排序、临时惩罚规则。</p>
         </div>
 
-        <div className="relative">
-          {/* Rolling animation overlay */}
-          <div
-            className="transition-transform duration-75"
-            style={{
-              animation: rolling ? "diceRoll 0.5s ease-in-out infinite" : "none",
-              // Add random rotation during roll to simulate 3D tumbling
-              transform: rolling
-                ? `rotateX(${(Math.floor(Math.random() * 4) + 1) * 90}deg) rotateY(${(Math.floor(Math.random() * 4) + 1) * 90}deg)`
-                : "rotateX(0deg) rotateY(0deg)",
-            }}
+        {/* Dice count controls */}
+        <div className="flex items-center gap-4">
+          <Button
+            variant="soft"
+            className="h-10 w-10 rounded-full !p-0 text-xl font-black"
+            onClick={() => changeDiceCount(-1)}
+            disabled={rolling || diceCount <= 1}
           >
-            <Dice3D value={value} rolling={rolling} />
+            −
+          </Button>
+          <div className="flex min-w-[80px] flex-col items-center">
+            <span className="text-2xl font-black text-slate-900">{diceCount}</span>
+            <span className="text-xs text-slate-500">{diceCount === 1 ? "个骰子" : "个骰子"}</span>
           </div>
+          <Button
+            variant="soft"
+            className="h-10 w-10 rounded-full !p-0 text-xl font-black"
+            onClick={() => changeDiceCount(1)}
+            disabled={rolling || diceCount >= 6}
+          >
+            +
+          </Button>
+        </div>
 
-          {/* Subtle shadow under the dice */}
+        {/* Dice display */}
+        <div className="relative">
+          {/* Shadow */}
           <div
-            className={`absolute -bottom-4 left-1/2 h-4 w-48 -translate-x-1/2 rounded-full bg-slate-900/10 blur-sm transition-all duration-300 ${
-              rolling ? "scale-110 animate-pulse" : "scale-100"
+            className={`absolute -bottom-3 left-1/2 h-4 w-48 -translate-x-1/2 rounded-full bg-slate-900/15 blur-sm transition-all duration-150 ${
+              rolling ? "scale-125 opacity-60" : "scale-100 opacity-40"
             }`}
           />
+
+          {/* Dice row */}
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {rolling
+              ? Array.from({ length: diceCount }, (_, i) => (
+                  <RollingDice3D key={i} animProgress={animProgress + i * 0.15} />
+                ))
+              : values.map((v, i) => (
+                  <Dice3D key={i} value={v} rolling={false} />
+                ))}
+          </div>
         </div>
+
+        {/* Sum display */}
+        {diceCount > 1 && (
+          <div className="rounded-2xl bg-slate-900 px-8 py-3 text-2xl font-black text-white shadow-lg">
+            总和：<span className="text-yellow-400">{sum}</span>
+          </div>
+        )}
 
         <Button
           onClick={roll}
