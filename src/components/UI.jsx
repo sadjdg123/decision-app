@@ -103,7 +103,7 @@ export function Confetti({ active }) {
             "--delay": `${(i % 5) * 0.06}s`,
             "--drift": `${(i % 2 ? 1 : -1) * (18 + i * 3)}px`,
             "--turn": `${i * 61}deg`,
-            background: ["#ff9d64", "#c5f7bc", "#a4bdff", "#e0b9ff"][i % 4],
+            background: ["#9d72f0", "#ffcf66", "#7bdbf3", "#ff9acb"][i % 4],
           }}
         />
       ))}

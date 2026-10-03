@@ -57,23 +57,37 @@ export default function CoinPage({ addHistory, reducedMotion }) {
       <div className={`coin-stage ${flipping ? "is-flipping" : ""}`}>
         <div className="coin-orbit" />
         <div className="coin-shadow" />
-        <div
-          className="coin-body"
-          data-testid="coin-body"
-          style={{
-            transform: `rotateY(${rotation}deg)`,
-            transitionDuration: reducedMotion ? "0ms" : "1400ms",
-          }}
-        >
-          <div className="coin-face coin-front">
-            <span className="coin-detail">DECISION CLUB · CHANCE</span>
-            <strong>正</strong>
-            <small>HEADS</small>
-          </div>
-          <div className="coin-face coin-back">
-            <span className="coin-detail">DECISION CLUB · CHANCE</span>
-            <strong>反</strong>
-            <small>TAILS</small>
+        <div className="coin-flight">
+          <div
+            className="coin-body"
+            data-testid="coin-body"
+            style={{
+              transform: `rotateY(${rotation}deg)`,
+              transitionDuration: reducedMotion ? "0ms" : "1400ms",
+            }}
+          >
+            <div
+              className="coin-face coin-front"
+              style={{
+                visibility:
+                  flipping || rotation % 360 === 0 ? "visible" : "hidden",
+              }}
+            >
+              <span className="coin-detail">DECISION CLUB · CHANCE</span>
+              <strong>正</strong>
+              <small>HEADS</small>
+            </div>
+            <div
+              className="coin-face coin-back"
+              style={{
+                visibility:
+                  flipping || rotation % 360 === 180 ? "visible" : "hidden",
+              }}
+            >
+              <span className="coin-detail">DECISION CLUB · CHANCE</span>
+              <strong>反</strong>
+              <small>TAILS</small>
+            </div>
           </div>
         </div>
       </div>

@@ -5,14 +5,14 @@ export const DICE_INTERVAL = 80;
 export const MAX_HISTORY = 50;
 export const MAX_WEIGHT = 20;
 export const WHEEL_COLORS = [
-  "#c5f7bc",
-  "#a4bdff",
-  "#ffbc93",
-  "#e0b9ff",
-  "#81d9d0",
-  "#f2df9c",
-  "#f29cb1",
-  "#b7c8ae",
+  "#b6a1ff",
+  "#7bdbf3",
+  "#ffb6d4",
+  "#ffe183",
+  "#98e6c0",
+  "#ffb692",
+  "#c4baff",
+  "#a0d5ff",
 ];
 
 export const defaultData = {

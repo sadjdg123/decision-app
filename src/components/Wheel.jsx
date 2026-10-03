@@ -32,6 +32,12 @@ export default function Wheel({
     >
       <div className="wheel-orbit wheel-orbit--outer" aria-hidden="true" />
       <div className="wheel-orbit wheel-orbit--inner" aria-hidden="true" />
+      <span className="stage-spark stage-spark--one" aria-hidden="true">
+        ✦
+      </span>
+      <span className="stage-spark stage-spark--two" aria-hidden="true">
+        ✧
+      </span>
       <div className="wheel-machine">
         <div className="wheel-ticks" aria-hidden="true" />
         <div className="wheel-lights" aria-hidden="true">
@@ -85,8 +91,8 @@ export default function Wheel({
                       textAnchor="middle"
                       dominantBaseline="central"
                       transform={`rotate(${p.readableAngle},${200 + p.x},${200 + p.y})`}
-                      fontSize={segment.size < 25 ? 10 : 14}
-                      fill="#14211e"
+                      fontSize={segment.size < 25 ? 12 : 17}
+                      fill="#34265a"
                       fontWeight="700"
                     >
                       {label}

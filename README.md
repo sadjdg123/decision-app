@@ -2,6 +2,12 @@
 
 聚餐和小游戏用的随机选择工具：加权大转盘、谁请客老虎机、抛硬币、1–6 个骰子。使用 React 19 + Vite 8，无账户、无服务端、无新增运行时依赖。
 
+## 紫色游乐场界面
+
+奶白与紫色界面、彩色转盘和立体按钮。手机导航位于顶部，不遮挡操作；硬币腾空翻转，停下时只显示对应结果的一面，并使用 Safari 背面隐藏样式。转盘减速、灯光追逐、开奖弹出、纸屑和骰子弹跳均支持减少动态效果设置。
+
+设计参考：[Dribbble Spin Wheel](https://dribbble.com/shots/26103656-Spin-Wheel-Mobile-App-Design)、[/nk.studio Magic Bottle](https://www.nk.studio/work/magic-bottle/)。界面与动效使用自己的 CSS/SVG 实现。
+
 ## 本地运行
 
 ```sh

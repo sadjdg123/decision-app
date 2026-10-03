@@ -492,6 +492,20 @@ export default function App() {
             一点随机，刚刚好
           </span>
         </header>
+        <nav className="mobile-nav" aria-label="手机抽选方式">
+          {tabs.map((tab) => (
+            <button
+              type="button"
+              key={tab.id}
+              aria-pressed={active === tab.id}
+              className={active === tab.id ? "is-active" : ""}
+              onClick={() => setActive(tab.id)}
+            >
+              <Icon name={tab.icon} size={22} />
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </nav>
         <main>
           {/* Keep each mode mounted so switching tabs preserves drafts and finishes active draws. */}
           <div hidden={active !== "food"}>
@@ -533,20 +547,6 @@ export default function App() {
               : "此浏览器无法保存数据，刷新后会丢失"}
           </span>
         </footer>
-        <nav className="mobile-nav" aria-label="手机抽选方式">
-          {tabs.map((tab) => (
-            <button
-              type="button"
-              key={tab.id}
-              aria-pressed={active === tab.id}
-              className={active === tab.id ? "is-active" : ""}
-              onClick={() => setActive(tab.id)}
-            >
-              <Icon name={tab.icon} size={22} />
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </nav>
       </div>
     </div>
   );
