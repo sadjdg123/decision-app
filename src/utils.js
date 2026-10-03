@@ -1,4 +1,9 @@
-import { STORAGE_KEY, MAX_HISTORY, MAX_WEIGHT, defaultData } from "./constants";
+import {
+  STORAGE_KEY,
+  MAX_HISTORY,
+  MAX_WEIGHT,
+  defaultData,
+} from "./constants.js";
 
 export function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -34,7 +39,10 @@ export function sanitizeItems(items) {
 
     const existing = map.get(clean.name);
     if (existing) {
-      map.set(clean.name, { name: clean.name, weight: Math.min(MAX_WEIGHT, existing.weight + clean.weight) });
+      map.set(clean.name, {
+        name: clean.name,
+        weight: Math.min(MAX_WEIGHT, existing.weight + clean.weight),
+      });
     } else {
       map.set(clean.name, clean);
     }
@@ -47,31 +55,50 @@ export function sanitizeTemplateMap(value, fallback) {
   if (!isPlainObject(value)) return fallback;
 
   const entries = Object.entries(value)
-    .filter(([name, list]) => typeof name === "string" && name.trim() && Array.isArray(list))
-    .map(([name, list]) => [name.trim(), sanitizeItems(list)])
-    .filter(([, list]) => list.length > 0);
+    .filter(
+      ([name, list]) =>
+        typeof name === "string" && name.trim() && Array.isArray(list),
+    )
+    .map(([name, list]) => [name.trim(), sanitizeItems(list)]);
 
-  return entries.length ? Object.fromEntries(entries) : fallback;
+  return Object.fromEntries(entries);
 }
 
 export function normalizeHistory(history) {
   if (!Array.isArray(history)) return [];
 
   return history
-    .filter((item) => isPlainObject(item) && typeof item.result === "string" && item.result.trim())
+    .filter(
+      (item) =>
+        isPlainObject(item) &&
+        typeof item.result === "string" &&
+        item.result.trim(),
+    )
     .map((item) => ({
-      type: typeof item.type === "string" && item.type.trim() ? item.type.trim() : "记录",
+      type:
+        typeof item.type === "string" && item.type.trim()
+          ? item.type.trim()
+          : "记录",
       result: item.result.trim(),
-      time: typeof item.time === "string" && item.time.trim() ? item.time : new Date().toISOString()
+      time:
+        typeof item.time === "string" && item.time.trim()
+          ? item.time
+          : new Date().toISOString(),
     }))
     .slice(0, MAX_HISTORY);
 }
 
 export function normalizeData(value) {
   return {
-    foodTemplates: sanitizeTemplateMap(value?.foodTemplates, defaultData.foodTemplates),
-    peopleTemplates: sanitizeTemplateMap(value?.peopleTemplates, defaultData.peopleTemplates),
-    history: normalizeHistory(value?.history)
+    foodTemplates: sanitizeTemplateMap(
+      value?.foodTemplates,
+      defaultData.foodTemplates,
+    ),
+    peopleTemplates: sanitizeTemplateMap(
+      value?.peopleTemplates,
+      defaultData.peopleTemplates,
+    ),
+    history: normalizeHistory(value?.history),
   };
 }
 
@@ -90,7 +117,10 @@ export function saveData(data) {
   if (typeof window === "undefined") return false;
 
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeData(data)));
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(normalizeData(data)),
+    );
     return true;
   } catch {
     return false;
@@ -105,7 +135,10 @@ export function weightedNames(cleanItems) {
   return cleanItems.flatMap((item) => Array(item.weight).fill(item.name));
 }
 
-export function pickWeightedIndex(cleanItems, weightTotal = totalWeight(cleanItems)) {
+export function pickWeightedIndex(
+  cleanItems,
+  weightTotal = totalWeight(cleanItems),
+) {
   if (!weightTotal) return -1;
 
   let cursor = Math.floor(Math.random() * weightTotal);
@@ -117,7 +150,10 @@ export function pickWeightedIndex(cleanItems, weightTotal = totalWeight(cleanIte
   return cleanItems.length - 1;
 }
 
-export function pickWeightedName(cleanItems, weightTotal = totalWeight(cleanItems)) {
+export function pickWeightedName(
+  cleanItems,
+  weightTotal = totalWeight(cleanItems),
+) {
   const index = pickWeightedIndex(cleanItems, weightTotal);
   return index >= 0 ? cleanItems[index].name : "";
 }
@@ -137,13 +173,14 @@ export function mod360(value) {
 export function getWheelLabelPosition(angleStart, angleSize, radius) {
   const labelAngle = angleStart + angleSize / 2;
   const radians = (labelAngle * Math.PI) / 180;
-  const readableAngle = labelAngle > 90 && labelAngle < 270 ? labelAngle + 180 : labelAngle;
+  const readableAngle =
+    labelAngle > 90 && labelAngle < 270 ? labelAngle + 180 : labelAngle;
 
   return {
     labelAngle,
     readableAngle,
     x: Math.sin(radians) * radius,
-    y: -Math.cos(radians) * radius
+    y: -Math.cos(radians) * radius,
   };
 }
 
@@ -154,14 +191,28 @@ export function getFinalRotationForTarget(currentRotation, targetCenterAngle) {
 }
 
 export function triggerVibration(pattern = 25) {
-  if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-    navigator.vibrate(pattern);
+  if (
+    typeof navigator !== "undefined" &&
+    typeof navigator.vibrate === "function"
+  ) {
+    try {
+      navigator.vibrate(pattern);
+    } catch {
+      /* Optional feedback must never interrupt a draw. */
+    }
   }
 }
 
 export function formatTime(value) {
   try {
-    return new Date(value).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "刚刚";
+    return date.toLocaleString("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return "刚刚";
   }
@@ -182,12 +233,41 @@ export function getSavedOptionNames() {
 
 export function runSelfTests() {
   const sample = sanitizeItems([{ name: "A", weight: 3 }]);
-  console.assert(weightedNames(sample).length === 3, "weightedNames should expand weights");
-  console.assert(pickWeightedIndex(sample) === 0, "pickWeightedIndex should pick the only item");
-  console.assert(pickWeightedName(sample) === "A", "pickWeightedName should pick the only item name");
-  console.assert(rollDiceValue() >= 1 && rollDiceValue() <= 6, "rollDiceValue should be from 1 to 6");
-  console.assert(mod360(getFinalRotationForTarget(0, 30)) === 330, "target center 30 degrees should align under top pointer");
-  console.assert(sanitizeItems([{ name: " A ", weight: 2 }, { name: "A", weight: 3 }])[0].weight === 5, "duplicate item weights should merge");
-  console.assert(sanitizeItems([{ name: "A", weight: 99 }])[0].weight === MAX_WEIGHT, "weights should be clamped");
-  console.assert(normalizeHistory([{ type: "吃什么", result: " 麦当劳 ", time: "2026-01-01T00:00:00.000Z" }])[0].result === "麦当劳", "history should be normalized");
+  console.assert(
+    weightedNames(sample).length === 3,
+    "weightedNames should expand weights",
+  );
+  console.assert(
+    pickWeightedIndex(sample) === 0,
+    "pickWeightedIndex should pick the only item",
+  );
+  console.assert(
+    pickWeightedName(sample) === "A",
+    "pickWeightedName should pick the only item name",
+  );
+  console.assert(
+    rollDiceValue() >= 1 && rollDiceValue() <= 6,
+    "rollDiceValue should be from 1 to 6",
+  );
+  console.assert(
+    mod360(getFinalRotationForTarget(0, 30)) === 330,
+    "target center 30 degrees should align under top pointer",
+  );
+  console.assert(
+    sanitizeItems([
+      { name: " A ", weight: 2 },
+      { name: "A", weight: 3 },
+    ])[0].weight === 5,
+    "duplicate item weights should merge",
+  );
+  console.assert(
+    sanitizeItems([{ name: "A", weight: 99 }])[0].weight === MAX_WEIGHT,
+    "weights should be clamped",
+  );
+  console.assert(
+    normalizeHistory([
+      { type: "吃什么", result: " 麦当劳 ", time: "2026-01-01T00:00:00.000Z" },
+    ])[0].result === "麦当劳",
+    "history should be normalized",
+  );
 }

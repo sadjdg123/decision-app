@@ -1,337 +1,421 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { STORAGE_KEY, SPIN_DURATION, SLOT_INTERVAL, DICE_INTERVAL, MAX_HISTORY, MAX_WEIGHT, defaultData, tabs } from "./constants";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MAX_HISTORY, SLOT_INTERVAL, SPIN_DURATION, tabs } from "./constants";
 import {
-  isPlainObject,
-  clampWeight,
-  sanitizeItem,
-  sanitizeItems,
-  sanitizeTemplateMap,
-  normalizeHistory,
-  normalizeData,
   loadData,
   saveData,
+  sanitizeItems,
   totalWeight,
-  weightedNames,
   pickWeightedIndex,
   pickWeightedName,
-  rollDiceValue,
-  mod360,
-  getWheelLabelPosition,
   getFinalRotationForTarget,
   triggerVibration,
   formatTime,
-  runSelfTests,
 } from "./utils";
+import { Button, Confetti, Icon, Panel } from "./components/UI";
 import DicePage from "./components/DicePage";
 import CoinPage from "./components/CoinPage";
 import Wheel from "./components/Wheel";
 import OptionEditor from "./components/OptionEditor";
 import TemplatePicker from "./components/TemplatePicker";
 
-function Button({ children, className = "", variant = "primary", disabled = false, ...props }) {
-  const base = "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
-  const styles = {
-    primary: "bg-slate-950 text-white hover:bg-slate-800",
-    purple: "bg-violet-600 text-white hover:bg-violet-700 shadow-lg shadow-violet-600/20",
-    danger: "bg-transparent text-red-500 hover:bg-red-50 hover:text-red-600",
-    soft: "bg-slate-100 text-slate-700 hover:bg-slate-200"
-  };
-
-  return (
-    <button type="button" disabled={disabled} className={`${base} ${styles[variant] || styles.primary} ${className}`} {...props}>
-      {children}
-    </button>
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const change = () => setReduced(media.matches);
+    media.addEventListener("change", change);
+    return () => media.removeEventListener("change", change);
+  }, []);
+  return reduced;
 }
 
-function Card({ children, className = "" }) {
-  return <div className={`rounded-2xl bg-white shadow-sm ${className}`}>{children}</div>;
-}
-
-function CardContent({ children, className = "" }) {
-  return <div className={className}>{children}</div>;
-}
-
-function Icon({ children, className = "" }) {
-  return <span className={`inline-flex h-5 w-5 items-center justify-center leading-none ${className}`}>{children}</span>;
-}
-
-function AntiDecisionHint({ count, result }) {
-  if (count < 4) return null;
-
-  const message = count >= 8 ? "你已经转很多次了，其实你心里可能已经有答案了 😏" : "再纠结一下也行，但这个结果已经可以考虑接受了。";
-
-  return (
-    <div className="rounded-2xl bg-amber-50 p-4 text-sm font-bold text-amber-700">
-      {message}{result ? ` 当前结果：${result}` : ""}
-    </div>
-  );
-}
-
-function WheelPage({ mode, data, setData, addHistory }) {
+function WheelPage({ mode, data, setData, addHistory, reducedMotion }) {
   const isFood = mode === "food";
   const templateKey = isFood ? "foodTemplates" : "peopleTemplates";
-  const templates = data[templateKey] || {};
-  const templateNames = Object.keys(templates);
-  const firstTemplate = templateNames[0] || "";
-  const initialItems = sanitizeItems(firstTemplate ? templates[firstTemplate] : []);
-  const [activeTemplate, setActiveTemplate] = useState(firstTemplate);
-  const [items, setItems] = useState(initialItems);
+  const templates = data[templateKey];
+  const [activeTemplate, setActiveTemplate] = useState(
+    () => Object.keys(templates)[0] || "",
+  );
+  const [items, setItems] = useState(() =>
+    sanitizeItems(templates[Object.keys(templates)[0]] || []),
+  );
+  const [savedSnapshot, setSavedSnapshot] = useState(() =>
+    JSON.stringify(items),
+  );
   const [selected, setSelected] = useState("");
   const [spinning, setSpinning] = useState(false);
-  const [justStopped, setJustStopped] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [slotItems, setSlotItems] = useState(["?", "?", "?"]);
-  const [tryCount, setTryCount] = useState(0);
+  const [round, setRound] = useState(0);
   const [pendingResult, setPendingResult] = useState(null);
-  const [savedSnapshot, setSavedSnapshot] = useState(JSON.stringify(initialItems));
-  const spinTimeoutRef = useRef(null);
-  const slotIntervalRefs = useRef([]);
-  const slotStopTimeoutRefs = useRef([]);
-  const slotTimeoutRef = useRef(null);
+  const [justStopped, setJustStopped] = useState(false);
+  const timers = useRef({ timeouts: [], intervals: [] });
+  const busy = useRef(false);
   const cleanItems = useMemo(() => sanitizeItems(items), [items]);
-  const cleanItemsKey = useMemo(() => JSON.stringify(cleanItems), [cleanItems]);
-  const cleanItemsTotal = useMemo(() => totalWeight(cleanItems), [cleanItemsKey]);
-  const isDirty = cleanItemsKey !== savedSnapshot;
+  const weightTotal = totalWeight(cleanItems);
+  const isDirty = JSON.stringify(cleanItems) !== savedSnapshot;
 
   useEffect(() => {
+    const handles = timers.current;
     return () => {
-      if (spinTimeoutRef.current) window.clearTimeout(spinTimeoutRef.current);
-      slotIntervalRefs.current.forEach((id) => id && window.clearInterval(id));
-      slotStopTimeoutRefs.current.forEach((id) => id && window.clearTimeout(id));
-      if (slotTimeoutRef.current) window.clearTimeout(slotTimeoutRef.current);
+      handles.timeouts.forEach(window.clearTimeout);
+      handles.intervals.forEach(window.clearInterval);
     };
   }, []);
 
-  useEffect(() => {
-    const names = Object.keys(templates);
-    if (activeTemplate && templates[activeTemplate]) return;
-
-    const nextName = names[0] || "";
-    const nextItems = sanitizeItems(nextName ? templates[nextName] : []);
+  const clearTimers = () => {
+    timers.current.timeouts.forEach(window.clearTimeout);
+    timers.current.intervals.forEach(window.clearInterval);
+    timers.current.timeouts = [];
+    timers.current.intervals = [];
+  };
+  const schedule = (callback, delay) => {
+    const id = window.setTimeout(callback, delay);
+    timers.current.timeouts.push(id);
+    return id;
+  };
+  const finish = (result) => {
+    busy.current = false;
+    setSpinning(false);
+    setSelected(result);
+    setPendingResult({ type: isFood ? "吃什么" : "谁请客", result });
+    setRound((n) => n + 1);
+    setJustStopped(true);
+    triggerVibration([30, 40, 30]);
+    schedule(() => setJustStopped(false), 1600);
+  };
+  const begin = () => {
+    if (busy.current || !weightTotal) return false;
+    busy.current = true;
+    clearTimers();
+    setSpinning(true);
+    setSelected("");
+    setPendingResult(null);
+    setJustStopped(false);
+    triggerVibration(25);
+    return true;
+  };
+  const spin = () => {
+    if (!begin()) return;
+    const target = pickWeightedIndex(cleanItems, weightTotal);
+    const center =
+      ((totalWeight(cleanItems.slice(0, target)) +
+        cleanItems[target].weight / 2) /
+        weightTotal) *
+      360;
+    setRotation((current) => getFinalRotationForTarget(current, center));
+    schedule(
+      () => finish(cleanItems[target].name),
+      reducedMotion ? 100 : SPIN_DURATION,
+    );
+  };
+  const slotSpin = () => {
+    if (!begin()) return;
+    const result = pickWeightedName(cleanItems, weightTotal);
+    if (reducedMotion) {
+      setSlotItems([result, result, result]);
+      schedule(() => finish(result), 100);
+      return;
+    }
+    [0, 1, 2].forEach((column) => {
+      const interval = window.setInterval(
+        () =>
+          setSlotItems((current) =>
+            current.map((name, i) =>
+              i === column ? pickWeightedName(cleanItems, weightTotal) : name,
+            ),
+          ),
+        SLOT_INTERVAL + column * 30,
+      );
+      timers.current.intervals.push(interval);
+      schedule(
+        () => {
+          window.clearInterval(interval);
+          setSlotItems((current) =>
+            current.map((name, i) => (i === column ? result : name)),
+          );
+        },
+        950 + column * 350,
+      );
+    });
+    schedule(() => finish(result), 1700);
+  };
+  const resetResult = () => {
+    setSelected("");
+    setPendingResult(null);
+    setJustStopped(false);
+    setSlotItems(["?", "?", "?"]);
+    setRotation(0);
+  };
+  const setEditorItems = (updater) => {
+    if (busy.current) return;
+    setItems(updater);
+    resetResult();
+  };
+  const mayDiscard = () =>
+    !isDirty || window.confirm("当前模板有未保存的修改，确定放弃这些修改？");
+  const choose = (name) => {
+    if (busy.current || name === activeTemplate || !mayDiscard()) return;
+    const next = sanitizeItems(templates[name] || []);
+    setActiveTemplate(name);
+    setItems(next);
+    setSavedSnapshot(JSON.stringify(next));
+    resetResult();
+    setRound(0);
+  };
+  const newTemplate = (name) => {
+    if (busy.current || Object.hasOwn(templates, name) || !mayDiscard())
+      return false;
+    setData((current) => ({
+      ...current,
+      [templateKey]: { ...current[templateKey], [name]: [] },
+    }));
+    setActiveTemplate(name);
+    setItems([]);
+    setSavedSnapshot("[]");
+    resetResult();
+    setRound(0);
+  };
+  const saveTemplate = (name) => {
+    if (busy.current) return;
+    setData((current) => ({
+      ...current,
+      [templateKey]: { ...current[templateKey], [name]: cleanItems },
+    }));
+    setItems(cleanItems);
+    setActiveTemplate(name);
+    setSavedSnapshot(JSON.stringify(cleanItems));
+  };
+  const deleteTemplate = (name) => {
+    if (busy.current) return;
+    const nextTemplates = { ...templates };
+    delete nextTemplates[name];
+    const nextName = Object.keys(nextTemplates)[0] || "";
+    const nextItems = sanitizeItems(nextTemplates[nextName] || []);
+    setData((current) => ({ ...current, [templateKey]: nextTemplates }));
     setActiveTemplate(nextName);
     setItems(nextItems);
     setSavedSnapshot(JSON.stringify(nextItems));
-    setSelected("");
-    setPendingResult(null);
-    setTryCount(0);
-    setSlotItems(["?", "?", "?"]);
-  }, [templates, activeTemplate]);
-
-  const finishResult = (result, type) => {
-    setSelected(result);
-    setPendingResult({ type, result });
-    setTryCount((count) => count + 1);
-    setJustStopped(true);
-    triggerVibration([30, 40, 30]);
-    // Auto-clear the glow after 1.5s
-    setTimeout(() => setJustStopped(false), 1500);
+    resetResult();
+    setRound(0);
   };
-
-  const confirmResult = () => {
-    if (!pendingResult) return;
+  const confirm = () => {
+    if (!pendingResult || busy.current) return;
     addHistory(pendingResult.type, pendingResult.result);
     setPendingResult(null);
   };
 
-  const spin = () => {
-    if (!cleanItems.length || spinning || !cleanItemsTotal) return;
-
-    const targetIndex = pickWeightedIndex(cleanItems, cleanItemsTotal);
-    if (targetIndex < 0) return;
-
-    const targetStart = cleanItems.slice(0, targetIndex).reduce((sum, item) => sum + (item.weight / cleanItemsTotal) * 360, 0);
-    const targetCenter = targetStart + (cleanItems[targetIndex].weight / cleanItemsTotal) * 180;
-    const finalRotation = getFinalRotationForTarget(rotation, targetCenter);
-
-    setSelected("");
-    setPendingResult(null);
-    setSpinning(true);
-    setRotation(finalRotation);
-    triggerVibration(25);
-
-    if (spinTimeoutRef.current) window.clearTimeout(spinTimeoutRef.current);
-    spinTimeoutRef.current = window.setTimeout(() => {
-      finishResult(cleanItems[targetIndex].name, isFood ? "吃什么" : "谁请客");
-      setSpinning(false);
-      spinTimeoutRef.current = null;
-    }, SPIN_DURATION);
-  };
-
-  const slotSpin = () => {
-    if (!cleanItems.length || spinning || !cleanItemsTotal) return;
-
-    setSelected("");
-    setPendingResult(null);
-    setSpinning(true);
-    triggerVibration(25);
-
-    slotIntervalRefs.current.forEach((id) => id && window.clearInterval(id));
-    slotStopTimeoutRefs.current.forEach((id) => id && window.clearTimeout(id));
-
-    slotIntervalRefs.current = [0, 1, 2].map((column) =>
-      window.setInterval(() => {
-        setSlotItems((current) => {
-          const next = [...current];
-          next[column] = pickWeightedName(cleanItems, cleanItemsTotal);
-          return next;
-        });
-      }, SLOT_INTERVAL + column * 45)
-    );
-
-    slotStopTimeoutRefs.current = [900, 1250, 1650].map((delay, column) =>
-      window.setTimeout(() => {
-        const intervalId = slotIntervalRefs.current[column];
-        if (intervalId) {
-          window.clearInterval(intervalId);
-          slotIntervalRefs.current[column] = null;
-        }
-      }, delay)
-    );
-
-    if (slotTimeoutRef.current) window.clearTimeout(slotTimeoutRef.current);
-    slotTimeoutRef.current = window.setTimeout(() => {
-      slotIntervalRefs.current.forEach((id) => id && window.clearInterval(id));
-      slotIntervalRefs.current = [];
-      slotStopTimeoutRefs.current = [];
-      const result = pickWeightedName(cleanItems, cleanItemsTotal);
-      setSlotItems([result, result, result]);
-      finishResult(result, "谁请客");
-      setSpinning(false);
-      slotTimeoutRef.current = null;
-    }, 1800);
-  };
-
-  const chooseTemplate = (name) => {
-    const nextItems = sanitizeItems(templates[name] || []);
-    setActiveTemplate(name);
-    setItems(nextItems);
-    setSavedSnapshot(JSON.stringify(nextItems));
-    setSelected("");
-    setPendingResult(null);
-    setTryCount(0);
-    setSlotItems(["?", "?", "?"]);
-  };
-
-  const handleNew = (name) => {
-    const nextTemplates = { ...templates, [name]: [] };
-    setData((currentData) => ({ ...currentData, [templateKey]: nextTemplates }));
-    setActiveTemplate(name);
-    setItems([]);
-    setSavedSnapshot(JSON.stringify([]));
-  };
-
-  const handleSave = (name) => {
-    const nextTemplates = { ...templates, [name]: [...cleanItems] };
-    setData((currentData) => ({ ...currentData, [templateKey]: nextTemplates }));
-    setActiveTemplate(name);
-    setSavedSnapshot(JSON.stringify(cleanItems));
-  };
-
-  const deleteTemplate = (name) => {
-    const nextTemplates = { ...templates };
-    delete nextTemplates[name];
-    const nextName = Object.keys(nextTemplates)[0] || "";
-    const nextItems = sanitizeItems(nextName ? nextTemplates[nextName] : []);
-
-    setData((currentData) => ({ ...currentData, [templateKey]: nextTemplates }));
-    setActiveTemplate(nextName);
-    setItems(nextItems);
-    setSavedSnapshot(JSON.stringify(nextItems));
-    setSelected("");
-    setPendingResult(null);
-    setTryCount(0);
-    setSlotItems(["?", "?", "?"]);
-  };
-
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_370px]">
-      <div className="space-y-5">
-        <Card className="overflow-hidden rounded-3xl bg-gradient-to-br from-white via-violet-50 to-slate-100">
-          <CardContent className="space-y-6 p-5 sm:p-8">
-            <div>
-              <div className="mb-2 inline-flex rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-700">{isFood ? "FOOD SPINNER" : "PAYER SLOT"}</div>
-              <h2 className="text-2xl font-black text-slate-900">{isFood ? "今天吃什么？" : "这顿谁请客？"}</h2>
-              <p className="mt-1 text-sm text-slate-500">支持人数越多，扇区越大，被抽中的概率越高。</p>
+    <div className="workspace-grid">
+      <Panel className="draw-panel">
+        <div className="draw-heading">
+          <div>
+            <span className="eyebrow">
+              {isFood ? "THE TASTE OF CHANCE" : "A LITTLE LUCK, A GREAT DINNER"}
+            </span>
+            <h2>
+              {isFood ? (
+                <>
+                  今天，吃点<span>什么？</span>
+                </>
+              ) : (
+                <>
+                  这顿，谁来<span>请客？</span>
+                </>
+              )}
+            </h2>
+            <p className="muted">
+              {isFood
+                ? "把纠结交给转盘，把好胃口留给自己。"
+                : "名单准备好，今晚的幸运嘉宾即将揭晓。"}
+            </p>
+          </div>
+          <span className="round-badge">
+            ROUND <b>{String(round + 1).padStart(2, "0")}</b>
+          </span>
+        </div>
+        <div className="draw-meta">
+          <span>
+            <i className="status-dot" />
+            {activeTemplate || "自由选择"}
+          </span>
+          <span>
+            {cleanItems.length} 个候选 · {weightTotal} 票
+          </span>
+        </div>
+        {isFood ? (
+          <Wheel
+            items={cleanItems}
+            spinning={spinning}
+            selected={selected}
+            rotation={rotation}
+            onSpin={spin}
+            justStopped={justStopped}
+            reducedMotion={reducedMotion}
+          />
+        ) : (
+          <div className={`slot-machine ${spinning ? "is-spinning" : ""}`}>
+            <div className="slot-topline">
+              <span>TONIGHT'S LUCKY ONE</span>
+              <i className="status-dot" />
             </div>
-            {isFood ? (
-              <Wheel items={cleanItems} spinning={spinning} selected={selected} rotation={rotation} onSpin={spin} justStopped={justStopped} />
-            ) : (
-              <div className="mx-auto max-w-md rounded-3xl bg-slate-950 p-5 shadow-2xl">
-                <div className="mb-4 text-center text-sm font-bold text-white/70">老虎机模式</div>
-                <div className="grid grid-cols-3 gap-3">
-                  {slotItems.map((item, index) => (
-                    <div key={`${item}-${index}`} className={`flex h-28 items-center justify-center rounded-2xl bg-white text-center text-xl font-black text-slate-900 shadow-inner transition-transform ${spinning ? "scale-105" : "scale-100"}`}>
-                      <span className="max-w-[80px] truncate">{item}</span>
-                    </div>
-                  ))}
+            <div className="slot-reels">
+              {slotItems.map((item, i) => (
+                <div className="slot-reel" key={i}>
+                  <span
+                    key={item}
+                    className={spinning ? "slot-name is-moving" : "slot-name"}
+                  >
+                    {item}
+                  </span>
                 </div>
-                <div className="mt-4 rounded-2xl bg-white/10 p-3 text-center text-white">
-                  结果：<b>{spinning ? "..." : selected || "?"}</b>
-                </div>
-              </div>
-            )}
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Button onClick={isFood ? spin : slotSpin} disabled={!cleanItems.length || spinning} variant="purple" className="h-12 w-full rounded-2xl text-base">
-                <Icon>{spinning ? "🔄" : "🎯"}</Icon>
-                {spinning ? "选择中..." : isFood ? "开始转盘" : "开始抽人"}
-              </Button>
-              <Button onClick={confirmResult} disabled={!pendingResult || spinning} variant="soft" className="h-12 w-full rounded-2xl text-base">
-                <Icon>✅</Icon>就决定它了
-              </Button>
+              ))}
             </div>
-            <AntiDecisionHint count={tryCount} result={selected} />
-          </CardContent>
-        </Card>
-      </div>
-      <div className="space-y-5">
-        <TemplatePicker title={isFood ? "店铺模板" : "人名模板"} templates={templates} activeName={activeTemplate} isDirty={isDirty} onChoose={chooseTemplate} onNew={handleNew} onSave={handleSave} onDelete={deleteTemplate} />
-        <OptionEditor items={items} setItems={setItems} placeholder={isFood ? "添加店名，比如 海底捞" : "添加人名，比如 小明"} foodTemplates={data.foodTemplates} peopleTemplates={data.peopleTemplates} />
-      </div>
+            <p>{spinning ? "好运正在排队入场" : "三格同名，今晚就是你"}</p>
+          </div>
+        )}
+        <div
+          className={`result-card ${selected && !spinning ? "has-result" : ""}`}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <Confetti active={justStopped && !reducedMotion} />
+          <div>
+            <span className="eyebrow">
+              {spinning
+                ? "FINDING YOUR ANSWER"
+                : selected
+                  ? "YOUR ANSWER"
+                  : "A LITTLE RANDOM MAGIC"}
+            </span>
+            <strong>
+              {spinning
+                ? "答案正在路上…"
+                : selected || "下一个好决定，从这里开始"}
+            </strong>
+          </div>
+          <span className="result-status">
+            {spinning
+              ? "抽选中"
+              : selected
+                ? pendingResult
+                  ? "待确认"
+                  : "已记下"
+                : "准备就绪"}
+          </span>
+        </div>
+        <div className="draw-actions">
+          <Button
+            onClick={isFood ? spin : slotSpin}
+            disabled={!weightTotal || spinning}
+            className="start-button"
+          >
+            {spinning
+              ? "正在选择…"
+              : round
+                ? "再来一次"
+                : isFood
+                  ? "转出今天的答案"
+                  : "抽出今晚的嘉宾"}
+            <Icon name="arrow" />
+          </Button>
+          <Button
+            variant="soft"
+            onClick={confirm}
+            disabled={!pendingResult || spinning}
+          >
+            <Icon name="check" />
+            就决定它了
+          </Button>
+        </div>
+        <p className="draw-note">
+          {round >= 4
+            ? "如果一直想重抽，也许你心里已经有了答案。"
+            : "每次独立抽选，按支持人数分配概率。确认后记入历史。"}
+        </p>
+      </Panel>
+      <aside className="settings-column">
+        <TemplatePicker
+          title={isFood ? "店铺模板" : "人名模板"}
+          templates={templates}
+          activeName={activeTemplate}
+          isDirty={isDirty}
+          onChoose={choose}
+          onNew={newTemplate}
+          onSave={saveTemplate}
+          onDelete={deleteTemplate}
+          disabled={spinning}
+        />
+        <OptionEditor
+          items={items}
+          setItems={setEditorItems}
+          placeholder={isFood ? "加一家想吃的店…" : "加一位今晚的朋友…"}
+          templates={templates}
+          disabled={spinning}
+        />
+      </aside>
     </div>
   );
 }
 
 function HistoryPanel({ history, activeFilter, onFilterChange, onClear }) {
-  const filters = ["全部", "吃什么", "谁请客", "抛硬币", "掷骰子"];
-  const visibleHistory = activeFilter === "全部" ? history : history.filter((item) => item.type === activeFilter);
-
+  const visible =
+    activeFilter === "全部"
+      ? history
+      : history.filter((item) => item.type === activeFilter);
   return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-bold text-slate-900">历史记录</h3>
-          <Button variant="soft" className="px-3 py-1 text-xs" onClick={onClear}>清空</Button>
+    <Panel className="history-panel">
+      <div className="history-heading">
+        <div className="history-title">
+          <Icon name="history" />
+          <h3>决定的足迹</h3>
+          <span className="count-badge">{history.length}</span>
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {filters.map((filter) => (
-            <button
-              key={filter}
-              type="button"
-              onClick={() => onFilterChange(filter)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${activeFilter === filter ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
-            >
-              {filter}
-            </button>
-          ))}
-        </div>
-        <div className="max-h-60 space-y-2 overflow-auto pr-1">
-          {visibleHistory.length ? (
-            visibleHistory.map((item, index) => (
-              <div key={`${item.time}-${index}`} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
-                <div>
-                  <div className="font-bold text-slate-800">{item.result}</div>
-                  <div className="text-xs text-slate-400">{item.type}</div>
-                </div>
-                <div className="text-xs text-slate-400">{formatTime(item.time)}</div>
-              </div>
-            ))
-          ) : (
-            <div className="rounded-xl bg-slate-50 px-3 py-6 text-center text-sm text-slate-400">还没有记录</div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+        <button
+          type="button"
+          className="text-button"
+          disabled={!history.length}
+          onClick={() => {
+            if (window.confirm("清空所有历史记录？")) onClear();
+          }}
+        >
+          <Icon name="trash" size={14} />
+          清空记录
+        </button>
+      </div>
+      <div className="history-filters">
+        {["全部", ...tabs.map((tab) => tab.label)].map((filter) => (
+          <button
+            type="button"
+            aria-pressed={activeFilter === filter}
+            className={activeFilter === filter ? "is-active" : ""}
+            key={filter}
+            onClick={() => onFilterChange(filter)}
+          >
+            {filter}
+          </button>
+        ))}
+      </div>
+      <div className="history-list">
+        {visible.length ? (
+          visible.map((item, index) => (
+            <div className="history-item" key={`${item.time}-${index}`}>
+              <span className="history-type">{item.type}</span>
+              <strong>{item.result}</strong>
+              <time dateTime={item.time}>{formatTime(item.time)}</time>
+            </div>
+          ))
+        ) : (
+          <div className="history-empty">
+            <span className="muted">好决定值得记下来。</span>
+            <span>确认转盘结果，或抛一次硬币、掷一次骰子。</span>
+          </div>
+        )}
+      </div>
+    </Panel>
   );
 }
 
@@ -340,72 +424,126 @@ export default function App() {
   const [data, setData] = useState(loadData);
   const [storageAvailable, setStorageAvailable] = useState(true);
   const [historyFilter, setHistoryFilter] = useState("全部");
-
+  const reducedMotion = useReducedMotion();
   useEffect(() => {
-    runSelfTests();
-  }, []);
-
-  useEffect(() => {
-    setStorageAvailable(saveData(data));
+    const saved = saveData(data);
+    // Saving is synchronous; only the status notification is deferred.
+    queueMicrotask(() => setStorageAvailable(saved));
   }, [data]);
-
-  const addHistory = (type, result) => {
-    setData((currentData) => ({
-      ...currentData,
-      history: [{ type, result, time: new Date().toISOString() }, ...(currentData.history || [])].slice(0, MAX_HISTORY)
+  useEffect(() => {
+    const beforeUnload = (event) => {
+      const unsaved = document.querySelector(".is-dirty");
+      if (unsaved) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, []);
+  const addHistory = (type, result) =>
+    setData((current) => ({
+      ...current,
+      history: [
+        { type, result, time: new Date().toISOString() },
+        ...current.history,
+      ].slice(0, MAX_HISTORY),
     }));
-  };
-
-  const clearHistory = () => {
-    setData((currentData) => ({ ...currentData, history: [] }));
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 p-4 text-slate-900 sm:p-6">
-      <div className="mx-auto max-w-6xl space-y-5">
-        <header className="flex flex-col gap-4 rounded-3xl bg-slate-950 p-5 text-white shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="mb-2 inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-white/70">Decision Party Pro</div>
-            <h1 className="text-2xl font-black sm:text-3xl">聚餐选择困难症终结器</h1>
-            <p className="mt-1 text-sm text-white/60">加权投票、历史记录、反纠结提醒、震动反馈，一页搞定。</p>
-          </div>
-          <div className="hidden grid-cols-4 gap-2 rounded-2xl bg-white/10 p-2 sm:grid">
+    <div className="app-shell">
+      <div className="ambient-light" aria-hidden="true" />
+      <div className="app-container">
+        <header className="app-header">
+          <a
+            className="brand"
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              setActive("food");
+            }}
+            aria-label="回到吃什么"
+          >
+            <span className="brand-mark">
+              <Icon name="wheel" size={25} />
+            </span>
+            <div>
+              <strong>
+                随它<span>·</span>
+              </strong>
+              <small>DECISION CLUB</small>
+            </div>
+          </a>
+          <nav className="desktop-nav" aria-label="抽选方式">
             {tabs.map((tab) => (
               <button
-                key={tab.id}
                 type="button"
+                key={tab.id}
+                aria-pressed={active === tab.id}
+                className={active === tab.id ? "is-active" : ""}
                 onClick={() => setActive(tab.id)}
-                className={`flex flex-col items-center gap-1 rounded-xl px-3 py-2 text-xs font-bold transition ${active === tab.id ? "bg-white text-slate-950" : "text-white/70 hover:bg-white/10"}`}
               >
-                <span className="text-lg leading-none">{tab.icon}</span>
+                <Icon name={tab.icon} size={18} />
                 {tab.label}
               </button>
             ))}
-          </div>
+          </nav>
+          <span className="header-note">
+            <i className="status-dot" />
+            一点随机，刚刚好
+          </span>
         </header>
-
-        <div className="space-y-5">
-          {active === "food" && <WheelPage mode="food" data={data} setData={setData} addHistory={addHistory} />}
-          {active === "payer" && <WheelPage mode="payer" data={data} setData={setData} addHistory={addHistory} />}
-          {active === "coin" && <CoinPage addHistory={addHistory} />}
-          {active === "dice" && <DicePage addHistory={addHistory} />}
-          <HistoryPanel history={data.history || []} activeFilter={historyFilter} onFilterChange={setHistoryFilter} onClear={clearHistory} />
-        </div>
-
-        <footer className="rounded-2xl bg-white p-4 pb-20 text-center text-xs text-slate-500 shadow-sm sm:pb-4">
-          {storageAvailable ? "数据会保存在当前浏览器本地。换手机或清缓存后需要重新添加模板。" : "当前浏览器无法保存本地数据，刷新后模板可能会丢失。"}
+        <main>
+          {/* Keep each mode mounted so switching tabs preserves drafts and finishes active draws. */}
+          <div hidden={active !== "food"}>
+            <WheelPage
+              mode="food"
+              data={data}
+              setData={setData}
+              addHistory={addHistory}
+              reducedMotion={reducedMotion}
+            />
+          </div>
+          <div hidden={active !== "payer"}>
+            <WheelPage
+              mode="payer"
+              data={data}
+              setData={setData}
+              addHistory={addHistory}
+              reducedMotion={reducedMotion}
+            />
+          </div>
+          <div hidden={active !== "coin"}>
+            <CoinPage addHistory={addHistory} reducedMotion={reducedMotion} />
+          </div>
+          <div hidden={active !== "dice"}>
+            <DicePage addHistory={addHistory} reducedMotion={reducedMotion} />
+          </div>
+          <HistoryPanel
+            history={data.history}
+            activeFilter={historyFilter}
+            onFilterChange={setHistoryFilter}
+            onClear={() => setData((current) => ({ ...current, history: [] }))}
+          />
+        </main>
+        <footer className="app-footer">
+          <span>随它 · MAKE ROOM FOR CHANCE</span>
+          <span role={storageAvailable ? undefined : "alert"}>
+            {storageAvailable
+              ? "模板和历史保存在此浏览器 · 修改名单后记得保存"
+              : "此浏览器无法保存数据，刷新后会丢失"}
+          </span>
         </footer>
-
-        <nav className="fixed bottom-4 left-1/2 z-50 grid w-[calc(100%-32px)] max-w-md -translate-x-1/2 grid-cols-4 gap-2 rounded-3xl bg-slate-950/95 p-2 text-white shadow-2xl backdrop-blur sm:hidden">
+        <nav className="mobile-nav" aria-label="手机抽选方式">
           {tabs.map((tab) => (
             <button
-              key={tab.id}
               type="button"
+              key={tab.id}
+              aria-pressed={active === tab.id}
+              className={active === tab.id ? "is-active" : ""}
               onClick={() => setActive(tab.id)}
-              className={`flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-bold transition ${active === tab.id ? "bg-white text-slate-950" : "text-white/70"}`}
             >
-              <span className="text-lg leading-none">{tab.icon}</span>
-              {tab.label}
+              <Icon name={tab.icon} size={22} />
+              <span>{tab.label}</span>
             </button>
           ))}
         </nav>

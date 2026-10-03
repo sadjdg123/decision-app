@@ -1,105 +1,113 @@
 import { useState } from "react";
+import { Button, Icon, Panel } from "./UI";
 
-function Card({ children, className = "" }) {
-  return <div className={`rounded-2xl bg-white shadow-sm ${className}`}>{children}</div>;
-}
-
-function CardContent({ children, className = "" }) {
-  return <div className={className}>{children}</div>;
-}
-
-function Icon({ children, className = "" }) {
-  return <span className={`inline-flex h-5 w-5 items-center justify-center leading-none ${className}`}>{children}</span>;
-}
-
-function Button({ children, className = "", variant = "primary", disabled = false, ...props }) {
-  const base = "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
-  const styles = {
-    primary: "bg-slate-950 text-white hover:bg-slate-800",
-    purple: "bg-violet-600 text-white hover:bg-violet-700 shadow-lg shadow-violet-600/20",
-    danger: "bg-transparent text-red-500 hover:bg-red-50 hover:text-red-600",
-    soft: "bg-slate-100 text-slate-700 hover:bg-slate-200",
-  };
-
-  return (
-    <button type="button" disabled={disabled} className={`${base} ${styles[variant] || styles.primary} ${className}`} {...props}>
-      {children}
-    </button>
-  );
-}
-
-export default function TemplatePicker({ title, templates, activeName, isDirty, onChoose, onNew, onSave, onDelete }) {
+export default function TemplatePicker({
+  title,
+  templates,
+  activeName,
+  isDirty,
+  onChoose,
+  onNew,
+  onSave,
+  onDelete,
+  disabled,
+}) {
   const [newName, setNewName] = useState("");
-  const templateNames = Object.keys(templates);
-
-  const handleNew = () => {
+  const [error, setError] = useState("");
+  const create = () => {
     const name = newName.trim();
-    if (!name) return;
-    onNew(name);
+    if (!name) return setError("先给模板起个名字。");
+    if (Object.hasOwn(templates, name))
+      return setError("这个名字已存在，换一个名字或保存当前模板。");
+    if (onNew(name) === false) return;
     setNewName("");
+    setError("");
   };
-
-  const handleSave = () => {
-    const name = newName.trim();
-    if (!name) return;
+  const save = () => {
+    const name = newName.trim() || activeName;
+    if (!name) return setError("先给模板起个名字。");
+    if (name !== activeName && Object.hasOwn(templates, name))
+      return setError("这个名字已存在，请换一个名字。");
     onSave(name);
     setNewName("");
+    setError("");
   };
-
   return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="font-bold text-slate-900">{title}</h3>
-          <span className={`shrink-0 text-xs font-bold ${isDirty ? "text-amber-600" : "text-slate-500"}`}>
-            {isDirty ? "当前模板未保存" : "已保存"}
-          </span>
+    <Panel className="templates-panel">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">YOUR COLLECTION</span>
+          <h3>{title}</h3>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          {templateNames.length > 0 ? (
-            templateNames.map((name) => (
-              <button
-                key={name}
-                type="button"
-                onClick={() => onChoose(name)}
-                className={`rounded-full px-3 py-2 text-sm font-medium transition ${activeName === name ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
-              >
-                {name}
-              </button>
-            ))
-          ) : (
-            <span className="rounded-full bg-slate-100 px-3 py-2 text-sm text-slate-500">暂无模板</span>
-          )}
+        <span className={isDirty ? "save-state is-dirty" : "save-state"}>
+          {isDirty ? "未保存" : "已保存"}
+        </span>
+      </div>
+      <fieldset disabled={disabled}>
+        <div className="template-chips">
+          {Object.keys(templates).map((name) => (
+            <button
+              type="button"
+              key={name}
+              onClick={() => onChoose(name)}
+              aria-pressed={name === activeName}
+              className={`template-chip ${name === activeName ? "is-active" : ""}`}
+            >
+              {name}
+            </button>
+          ))}
         </div>
-
-        <div className="flex gap-2">
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSave();
-            }}
-            placeholder="输入模板名"
-            className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-violet-400"
-          />
-        </div>
-
-        <div className="flex gap-2">
-          <Button onClick={handleNew} variant="soft" className="flex-1">
-            <Icon>✨</Icon>空白新建
-          </Button>
-          <Button onClick={handleSave} variant="purple" className="flex-1">
-            <Icon>💾</Icon>保存当前
-          </Button>
-        </div>
-
-        {activeName && (
-          <Button variant="danger" onClick={() => onDelete(activeName)} className="w-full">
-            <Icon>🗑️</Icon>删除当前模板
-          </Button>
+        {!Object.keys(templates).length && (
+          <p className="muted small">创建一份名单，下次直接用。</p>
         )}
-      </CardContent>
-    </Card>
+        <input
+          className="template-input"
+          value={newName}
+          maxLength={40}
+          onChange={(e) => {
+            setNewName(e.target.value);
+            setError("");
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              save();
+            }
+          }}
+          placeholder={
+            activeName ? "新名字（留空保存当前模板）" : "输入模板名称"
+          }
+          aria-label="模板名称"
+        />
+        <div className="template-actions">
+          <Button variant="soft" onClick={create}>
+            <Icon name="plus" size={16} />
+            空白新建
+          </Button>
+          <Button variant="mint" onClick={save}>
+            <Icon name="save" size={16} />
+            保存当前
+          </Button>
+        </div>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        {activeName && (
+          <button
+            type="button"
+            className="text-button delete-template"
+            onClick={() => {
+              if (window.confirm(`删除模板“${activeName}”？`))
+                onDelete(activeName);
+            }}
+          >
+            <Icon name="trash" size={14} />
+            删除当前模板
+          </button>
+        )}
+      </fieldset>
+    </Panel>
   );
 }
