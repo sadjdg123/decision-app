@@ -5,14 +5,14 @@ export const SOUND_KEY = "decision-club-sound";
 export const MAX_HISTORY = 50;
 export const MAX_WEIGHT = 20;
 export const WHEEL_COLORS = [
-  "#ff6b6b",
-  "#ffb347",
-  "#ffd93d",
-  "#6bcb77",
-  "#4dd4c6",
-  "#4d96ff",
-  "#9b72ff",
-  "#ff7ac6",
+  "#c8735a",
+  "#d9a75b",
+  "#8fa58a",
+  "#5e8c8f",
+  "#6f86a8",
+  "#9a7ea6",
+  "#c98c8c",
+  "#cbb995",
 ];
 
 // Avoid two neighbouring slices sharing a colour when the list wraps around.

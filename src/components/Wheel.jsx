@@ -6,7 +6,7 @@ import { playTick } from "../sound";
 const C = 200;
 const R = 186;
 const HUB = 50;
-const LIGHTS = 24;
+const LIGHTS = 48;
 
 function point(angle, radius) {
   const radians = (angle * Math.PI) / 180;
@@ -114,22 +114,22 @@ export default function Wheel({
       <svg className="wheel-frame" viewBox="0 0 400 400" aria-hidden="true">
         <defs>
           <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#ffe9a8" />
-            <stop offset=".45" stopColor="#f2b134" />
-            <stop offset="1" stopColor="#a8621a" />
+            <stop offset="0" stopColor="#f4e6cc" />
+            <stop offset=".5" stopColor="#bfa07a" />
+            <stop offset="1" stopColor="#6e5940" />
           </linearGradient>
         </defs>
         <circle cx={C} cy={C} r="199" fill="url(#rim)" />
-        <circle cx={C} cy={C} r="191" fill="#1a1530" />
+        <circle cx={C} cy={C} r="196" fill="#151517" />
         {Array.from({ length: LIGHTS }, (_, i) => {
-          const [x, y] = point((i * 360) / LIGHTS, 195);
+          const [x, y] = point((i * 360) / LIGHTS, 185);
           return (
             <circle
               key={i}
               className={`bulb ${i % 2 ? "bulb--odd" : ""}`}
               cx={x}
               cy={y}
-              r="3.2"
+              r={i % 4 ? 1.4 : 2.4}
             />
           );
         })}
@@ -151,8 +151,8 @@ export default function Wheel({
                   <path
                     d={slicePath(segment.start, segment.size)}
                     fill={segment.color}
-                    stroke="#1a1530"
-                    strokeWidth={segments.length > 1 ? 2.5 : 0}
+                    stroke="#151517"
+                    strokeWidth={segments.length > 1 ? 1.5 : 0}
                     strokeLinejoin="round"
                   />
                   {label.fontSize >= 9 && (
@@ -171,7 +171,7 @@ export default function Wheel({
               );
             })
           ) : (
-            <circle cx={C} cy={C} r={R} fill="#2a2446" />
+            <circle cx={C} cy={C} r={R} fill="#26262b" />
           )}
           <circle
             cx={C}
@@ -179,7 +179,7 @@ export default function Wheel({
             r={R}
             fill="none"
             stroke="#ffffff"
-            strokeOpacity=".18"
+            strokeOpacity=".12"
             strokeWidth="1.5"
           />
         </svg>
@@ -188,12 +188,12 @@ export default function Wheel({
         <svg viewBox="0 0 40 52">
           <path
             d="M20 50 4 18a16 16 0 1 1 32 0Z"
-            fill="#fff4d6"
-            stroke="#1a1530"
-            strokeWidth="3"
+            fill="#efe2c8"
+            stroke="#151517"
+            strokeWidth="2.5"
             strokeLinejoin="round"
           />
-          <circle cx="20" cy="17" r="6" fill="#ff6b6b" />
+          <circle cx="20" cy="17" r="5" fill="#151517" />
         </svg>
       </div>
       <button
