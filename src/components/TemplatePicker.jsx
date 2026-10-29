@@ -34,11 +34,8 @@ export default function TemplatePicker({
   };
   return (
     <Panel className="templates-panel">
-      <div className="panel-heading">
-        <div>
-          <span className="eyebrow">YOUR COLLECTION</span>
-          <h3>{title}</h3>
-        </div>
+      <div className="panel-head">
+        <h3>{title}</h3>
         <span className={isDirty ? "save-state is-dirty" : "save-state"}>
           {isDirty ? "未保存" : "已保存"}
         </span>
@@ -84,7 +81,7 @@ export default function TemplatePicker({
             <Icon name="plus" size={16} />
             空白新建
           </Button>
-          <Button variant="mint" onClick={save}>
+          <Button variant="soft" onClick={save}>
             <Icon name="save" size={16} />
             保存当前
           </Button>

@@ -1,19 +1,27 @@
 export const STORAGE_KEY = "decision-party-app-pro-v5";
 export const SPIN_DURATION = 3600;
-export const SLOT_INTERVAL = 90;
-export const DICE_INTERVAL = 80;
+export const REEL_DURATION = 2400;
+export const SOUND_KEY = "decision-club-sound";
 export const MAX_HISTORY = 50;
 export const MAX_WEIGHT = 20;
 export const WHEEL_COLORS = [
-  "#b6a1ff",
-  "#7bdbf3",
-  "#ffb6d4",
-  "#ffe183",
-  "#98e6c0",
-  "#ffb692",
-  "#c4baff",
-  "#a0d5ff",
+  "#ff6b6b",
+  "#ffb347",
+  "#ffd93d",
+  "#6bcb77",
+  "#4dd4c6",
+  "#4d96ff",
+  "#9b72ff",
+  "#ff7ac6",
 ];
+
+// Avoid two neighbouring slices sharing a colour when the list wraps around.
+export function wheelColor(index, count) {
+  const size = WHEEL_COLORS.length;
+  if (count > 1 && index === count - 1 && count % size === 1)
+    return WHEEL_COLORS[3];
+  return WHEEL_COLORS[index % size];
+}
 
 export const defaultData = {
   foodTemplates: {

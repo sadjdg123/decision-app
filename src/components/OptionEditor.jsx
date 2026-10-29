@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { MAX_WEIGHT, WHEEL_COLORS } from "../constants";
+import { MAX_WEIGHT, wheelColor } from "../constants";
 import { Button, Icon, Panel } from "./UI";
 
 export default function OptionEditor({
@@ -36,16 +36,13 @@ export default function OptionEditor({
   };
   return (
     <Panel className="editor-panel">
-      <div className="panel-heading">
-        <div>
-          <span className="eyebrow">THE POSSIBILITIES</span>
-          <h3>选项设置</h3>
-        </div>
-        <span className="count-badge">
-          {items.length.toString().padStart(2, "0")}
-        </span>
+      <div className="panel-head">
+        <h3>
+          选项
+          <span className="count">{items.length}</span>
+        </h3>
+        <span className="muted small">票数越多，越容易中</span>
       </div>
-      <p className="muted small">支持人数越多，被抽中的概率越高。</p>
       <fieldset disabled={disabled}>
         <div className="add-option">
           <input
@@ -81,7 +78,7 @@ export default function OptionEditor({
               <i
                 className="option-dot"
                 style={{
-                  background: WHEEL_COLORS[index % WHEEL_COLORS.length],
+                  background: wheelColor(index, items.length),
                 }}
               />
               <div className="option-name">
@@ -100,11 +97,11 @@ export default function OptionEditor({
                   aria-label={`选项 ${index + 1} 名称`}
                   maxLength={80}
                 />
-                <div className="probability-line">
+                <div className="odds">
                   <i
                     style={{
                       width: `${total ? (item.weight / total) * 100 : 0}%`,
-                      background: WHEEL_COLORS[index % WHEEL_COLORS.length],
+                      background: wheelColor(index, items.length),
                     }}
                   />
                 </div>
@@ -124,7 +121,7 @@ export default function OptionEditor({
               >
                 {Array.from({ length: MAX_WEIGHT }, (_, i) => (
                   <option value={i + 1} key={i}>
-                    {i + 1}人
+                    {i + 1} 票
                   </option>
                 ))}
               </select>
@@ -141,15 +138,13 @@ export default function OptionEditor({
             </div>
           ))}
         </div>
-        {!items.length && (
-          <p className="empty-state">候选名单还是空的，添加第一个选项。</p>
-        )}
+        {!items.length && <p className="empty">名单还是空的，先加一个。</p>}
       </fieldset>
       <div className="editor-foot">
         <span>
-          {disabled ? "抽选中，选项暂时锁定" : "同名选项会合并支持人数"}
+          {disabled ? "抽选中，选项暂时锁定" : "同名选项会自动合并票数"}
         </span>
-        <span>{total} 票</span>
+        <span>共 {total} 票</span>
       </div>
     </Panel>
   );

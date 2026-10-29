@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { triggerVibration } from "../utils";
+import { playStart, playWin } from "../sound";
 import { Button, Confetti, Icon, Panel } from "./UI";
 
 export default function CoinPage({ addHistory, reducedMotion }) {
@@ -7,6 +8,9 @@ export default function CoinPage({ addHistory, reducedMotion }) {
   const [flipping, setFlipping] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [celebrating, setCelebrating] = useState(false);
+  const [labels, setLabels] = useState({ 正面: "", 反面: "" });
+  const describe = (side) =>
+    labels[side].trim() ? `${side} · ${labels[side].trim()}` : side;
   const timers = useRef([]);
   const busy = useRef(false);
   useEffect(() => {
@@ -27,12 +31,14 @@ export default function CoinPage({ addHistory, reducedMotion }) {
       (current) =>
         (Math.floor(current / 360) + 5) * 360 + (next === "反面" ? 180 : 0),
     );
+    playStart();
     triggerVibration(25);
     timers.current.push(
       window.setTimeout(
         () => {
           setResult(next);
-          addHistory("抛硬币", next);
+          addHistory("抛硬币", describe(next));
+          playWin();
           setFlipping(false);
           busy.current = false;
           setCelebrating(true);
@@ -46,16 +52,34 @@ export default function CoinPage({ addHistory, reducedMotion }) {
     );
   };
   return (
-    <Panel className="solo-panel coin-panel">
-      <div className="solo-heading">
-        <span className="eyebrow">TWO SIDES. ONE ANSWER.</span>
+    <Panel className="solo-panel">
+      <div className="solo-head">
         <h2>
-          给犹豫，一个<span>答案。</span>
+          正面还是<em>反面</em>？
         </h2>
-        <p className="muted">正面还是反面？先说好，再让硬币落下来。</p>
+        <p className="muted">先说好两面各代表什么，再让硬币落下来。</p>
+      </div>
+      <div className="coin-labels">
+        {["正面", "反面"].map((side) => (
+          <label
+            key={side}
+            className={`coin-label coin-label--${side === "正面" ? "heads" : "tails"}`}
+          >
+            <span>{side === "正面" ? "正" : "反"}</span>
+            <input
+              value={labels[side]}
+              maxLength={20}
+              disabled={flipping}
+              placeholder={side === "正面" ? "比如：去" : "比如：不去"}
+              aria-label={`${side}代表什么`}
+              onChange={(e) =>
+                setLabels((current) => ({ ...current, [side]: e.target.value }))
+              }
+            />
+          </label>
+        ))}
       </div>
       <div className={`coin-stage ${flipping ? "is-flipping" : ""}`}>
-        <div className="coin-orbit" />
         <div className="coin-shadow" />
         <div className="coin-flight">
           <div
@@ -73,7 +97,6 @@ export default function CoinPage({ addHistory, reducedMotion }) {
                   flipping || rotation % 360 === 0 ? "visible" : "hidden",
               }}
             >
-              <span className="coin-detail">DECISION CLUB · CHANCE</span>
               <strong>正</strong>
               <small>HEADS</small>
             </div>
@@ -84,7 +107,6 @@ export default function CoinPage({ addHistory, reducedMotion }) {
                   flipping || rotation % 360 === 180 ? "visible" : "hidden",
               }}
             >
-              <span className="coin-detail">DECISION CLUB · CHANCE</span>
               <strong>反</strong>
               <small>TAILS</small>
             </div>
@@ -92,22 +114,29 @@ export default function CoinPage({ addHistory, reducedMotion }) {
         </div>
       </div>
       <div
-        className={`result-card solo-result ${result ? "has-result" : ""}`}
+        className={`result ${result ? "has-result" : ""}`}
         role="status"
         aria-live="polite"
       >
         <Confetti active={celebrating && !reducedMotion} />
-        <span className="eyebrow">YOUR ANSWER</span>
-        <strong>
-          {flipping ? "硬币还在空中…" : result || "先给两面各分配一个选择"}
+        <span className="result-label">结果</span>
+        <strong key={result || (flipping ? "flip" : "idle")}>
+          {flipping
+            ? "硬币还在空中…"
+            : result
+              ? describe(result)
+              : "点下面的按钮抛一次"}
         </strong>
       </div>
-      <Button onClick={flip} disabled={flipping} className="solo-action">
-        <Icon name="coin" />
-        {flipping ? "等待落定…" : "抛一次硬币"}
+      <Button
+        onClick={flip}
+        disabled={flipping}
+        className="action-main solo-action"
+      >
+        {flipping ? "等待落定…" : "抛硬币"}
         <Icon name="arrow" />
       </Button>
-      <p className="draw-note">两面等概率 · 每次独立抽选 · 自动记录结果</p>
+      <p className="footnote">两面各 50% · 落定后自动记录</p>
     </Panel>
   );
 }

@@ -41,6 +41,21 @@ const paths = {
       <path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7M12 7v5l3 2" />
     </>
   ),
+  list: <path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" />,
+  edit: <path d="M4 20h4L19 9l-4-4L4 16v4Zm9-13 4 4" />,
+  chevron: <path d="m6 9 6 6 6-6" />,
+  sound: (
+    <>
+      <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+      <path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
+    </>
+  ),
+  mute: (
+    <>
+      <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+      <path d="m17 9 5 6m0-6-5 6" />
+    </>
+  ),
   save: (
     <>
       <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2ZM7 3v6h10V3M7 21v-8h10v8" />
@@ -56,7 +71,7 @@ export function Icon({ name, size = 20 }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.6"
+      strokeWidth="1.9"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -95,7 +110,7 @@ export function Confetti({ active }) {
   if (!active) return null;
   return (
     <div className="confetti" aria-hidden="true">
-      {Array.from({ length: 26 }, (_, i) => (
+      {Array.from({ length: 34 }, (_, i) => (
         <i
           key={i}
           style={{
@@ -103,7 +118,9 @@ export function Confetti({ active }) {
             "--delay": `${(i % 5) * 0.06}s`,
             "--drift": `${(i % 2 ? 1 : -1) * (18 + i * 3)}px`,
             "--turn": `${i * 61}deg`,
-            background: ["#9d72f0", "#ffcf66", "#7bdbf3", "#ff9acb"][i % 4],
+            background: ["#ff6b6b", "#ffd93d", "#4dd4c6", "#9b72ff", "#ff7ac6"][
+              i % 5
+            ],
           }}
         />
       ))}

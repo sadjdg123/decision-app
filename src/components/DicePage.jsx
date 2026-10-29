@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { rollDiceValues, triggerVibration } from "../utils";
+import { playStart, playWin } from "../sound";
 import { Button, Confetti, Icon, Panel } from "./UI";
 
 const FACE_PIPS = {
@@ -107,6 +108,7 @@ export default function DicePage({ addHistory, reducedMotion }) {
         ];
       }),
     );
+    playStart();
     triggerVibration(25);
     timers.current.push(
       window.setTimeout(
@@ -123,6 +125,7 @@ export default function DicePage({ addHistory, reducedMotion }) {
               ? String(total)
               : `${nextValues.join(" + ")} = ${total}`,
           );
+          playWin();
           triggerVibration([30, 40, 30]);
           timers.current.push(
             window.setTimeout(() => setCelebrating(false), 1600),
@@ -143,34 +146,33 @@ export default function DicePage({ addHistory, reducedMotion }) {
   };
   const total = values.reduce((sum, n) => sum + n, 0);
   return (
-    <Panel className="solo-panel dice-panel">
-      <div className="solo-heading">
-        <span className="eyebrow">ROLL WITH THE UNEXPECTED</span>
+    <Panel className="solo-panel">
+      <div className="solo-head">
         <h2>
-          好运，掷地<span>有声。</span>
+          掷个<em>骰子</em>
         </h2>
-        <p className="muted">一个小决定，或者一场游戏。让点数说话。</p>
+        <p className="muted">小决定、桌游、比大小，让点数说话。</p>
       </div>
-      <div className="dice-count">
-        <Button
-          variant="soft"
+      <div className="stepper" role="group" aria-label="骰子数量">
+        <button
+          type="button"
           onClick={() => changeCount(-1)}
           disabled={rolling || count === 1}
           aria-label="减少骰子"
         >
           −
-        </Button>
+        </button>
         <span>
-          <b>{count}</b> 个骰子
+          <b>{count}</b> 个
         </span>
-        <Button
-          variant="soft"
+        <button
+          type="button"
           onClick={() => changeCount(1)}
           disabled={rolling || count === 6}
           aria-label="增加骰子"
         >
           +
-        </Button>
+        </button>
       </div>
       <div className="dice-stage">
         {poses.map((pose, i) => (
@@ -185,30 +187,34 @@ export default function DicePage({ addHistory, reducedMotion }) {
         ))}
       </div>
       <div
-        className={`result-card solo-result ${hasResult ? "has-result" : ""}`}
+        className={`result ${hasResult ? "has-result" : ""}`}
         role="status"
         aria-live="polite"
       >
         <Confetti active={celebrating && !reducedMotion} />
-        <span className="eyebrow">
-          {count > 1 ? "THE TOTAL" : "YOUR NUMBER"}
-        </span>
-        <strong>
+        <span className="result-label">{count > 1 ? "合计" : "点数"}</span>
+        <strong
+          key={hasResult ? values.join() : rolling ? "roll" : "idle"}
+          className="tabular"
+        >
           {rolling
-            ? "好运正在翻滚…"
+            ? "骰子在滚…"
             : hasResult
               ? count === 1
                 ? `${total} 点`
                 : `${values.join(" + ")} = ${total}`
-              : "准备好，就掷一次"}
+              : "点下面的按钮掷一次"}
         </strong>
       </div>
-      <Button onClick={roll} disabled={rolling} className="solo-action">
-        <Icon name="dice" />
-        {rolling ? "等待落定…" : "掷一次骰子"}
+      <Button
+        onClick={roll}
+        disabled={rolling}
+        className="action-main solo-action"
+      >
+        {rolling ? "等待落定…" : "掷骰子"}
         <Icon name="arrow" />
       </Button>
-      <p className="draw-note">1–6 个骰子 · 每面等概率 · 自动记录结果</p>
+      <p className="footnote">1–6 个骰子 · 每面等概率 · 落定后自动记录</p>
     </Panel>
   );
 }
