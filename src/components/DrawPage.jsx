@@ -12,10 +12,9 @@ import { playStart, playWin } from "../sound";
 import { Button, Confetti, Icon, Panel } from "./UI";
 import Wheel from "./Wheel";
 import SlotReel from "./SlotReel";
+import { idleReel, planReel } from "../reel";
 import OptionEditor from "./OptionEditor";
 import TemplatePicker from "./TemplatePicker";
-
-const idleReel = (id) => ({ id, strip: ["", "?", ""], target: 1 });
 
 export default function DrawPage({
   mode,
@@ -39,7 +38,7 @@ export default function DrawPage({
   const [selected, setSelected] = useState("");
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
-  const [reel, setReel] = useState(() => idleReel(0));
+  const [reel, setReel] = useState(() => idleReel());
   const [round, setRound] = useState(0);
   const [pendingResult, setPendingResult] = useState(null);
   const [justStopped, setJustStopped] = useState(false);
@@ -100,20 +99,15 @@ export default function DrawPage({
     if (!begin()) return;
     const result = pickWeightedName(cleanItems, weightTotal);
     const pick = () => pickWeightedName(cleanItems, weightTotal);
-    const filler = Array.from({ length: 26 }, pick);
-    const current = selected || "?";
-    setReel((r) => ({
-      id: r.id + 1,
-      strip: [pick(), current, ...filler, result, pick()],
-      target: filler.length + 2,
-    }));
+    const names = cleanItems.map((item) => item.name);
+    setReel((r) => planReel(r, names, pick, result));
     schedule(() => finish(result), reducedMotion ? 100 : REEL_DURATION);
   };
   const resetResult = () => {
     setSelected("");
     setPendingResult(null);
     setJustStopped(false);
-    setReel((r) => idleReel(r.id + 1));
+    setReel((r) => idleReel(r));
   };
   const setEditorItems = (updater) => {
     if (busy.current) return;
@@ -226,6 +220,7 @@ export default function DrawPage({
           ) : (
             <SlotReel
               reel={reel}
+              names={cleanItems.map((item) => item.name)}
               spinning={spinning}
               selected={selected}
               reducedMotion={reducedMotion}

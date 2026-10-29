@@ -141,3 +141,23 @@ test("storage errors are reported without throwing", () => {
     globalThis.window = oldWindow;
   }
 });
+
+test("slot drum keeps visible faces and lands the result on a hidden face", async () => {
+  const { FACES, idleReel, planReel } = await import("../src/reel.js");
+  const names = ["A", "B", "C", "D"];
+  let reel = idleReel();
+  for (let round = 0; round < 50; round += 1) {
+    const before = reel.faces ?? [];
+    const next = planReel(reel, names, () => "X", `R${round}`);
+    assert.equal(next.faces.length, FACES);
+    assert.equal(next.faces[next.target], `R${round}`);
+    const distance = Math.abs(next.target - reel.target) % FACES;
+    assert.ok(Math.min(distance, FACES - distance) > 2);
+    if (before.length)
+      for (const offset of [-2, -1, 0, 1, 2]) {
+        const i = (reel.target + offset + FACES) % FACES;
+        assert.equal(next.faces[i], before[i]);
+      }
+    reel = next;
+  }
+});

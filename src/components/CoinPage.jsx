@@ -2,17 +2,23 @@ import { useEffect, useRef, useState } from "react";
 import { triggerVibration } from "../utils";
 import { playStart, playWin } from "../sound";
 import { Button, Confetti, Icon, Panel } from "./UI";
+import { useScene } from "./Scene3D";
+
+const FLIP_DURATION = 1600;
+const loadCoin = () =>
+  import("../three/coin3d").then((module) => module.createCoinScene);
 
 export default function CoinPage({ addHistory, reducedMotion }) {
   const [result, setResult] = useState("");
   const [flipping, setFlipping] = useState(false);
-  const [rotation, setRotation] = useState(0);
+  const [side, setSide] = useState("正面");
   const [celebrating, setCelebrating] = useState(false);
   const [labels, setLabels] = useState({ 正面: "", 反面: "" });
   const describe = (side) =>
     labels[side].trim() ? `${side} · ${labels[side].trim()}` : side;
   const timers = useRef([]);
   const busy = useRef(false);
+  const { canvasRef, sceneRef, status } = useScene(loadCoin);
   useEffect(() => {
     const handles = timers.current;
     return () => handles.forEach(window.clearTimeout);
@@ -26,17 +32,16 @@ export default function CoinPage({ addHistory, reducedMotion }) {
     timers.current.forEach(window.clearTimeout);
     timers.current.length = 0;
     const next = Math.random() < 0.5 ? "正面" : "反面";
-    // Determine the destination before animating, so the visible face and history always agree.
-    setRotation(
-      (current) =>
-        (Math.floor(current / 360) + 5) * 360 + (next === "反面" ? 180 : 0),
-    );
+    // Decide the landing side first, so the coin on screen and the record always agree.
+    if (reducedMotion) sceneRef.current?.show(next);
+    else sceneRef.current?.flip(next, { duration: FLIP_DURATION });
     playStart();
     triggerVibration(25);
     timers.current.push(
       window.setTimeout(
         () => {
           setResult(next);
+          setSide(next);
           addHistory("抛硬币", describe(next));
           playWin();
           setFlipping(false);
@@ -47,7 +52,7 @@ export default function CoinPage({ addHistory, reducedMotion }) {
             window.setTimeout(() => setCelebrating(false), 1600),
           );
         },
-        reducedMotion ? 100 : 1400,
+        reducedMotion ? 100 : FLIP_DURATION,
       ),
     );
   };
@@ -79,39 +84,18 @@ export default function CoinPage({ addHistory, reducedMotion }) {
           </label>
         ))}
       </div>
-      <div className={`coin-stage ${flipping ? "is-flipping" : ""}`}>
-        <div className="coin-shadow" />
-        <div className="coin-flight">
-          <div
-            className="coin-body"
-            data-testid="coin-body"
-            style={{
-              transform: `rotateY(${rotation}deg)`,
-              transitionDuration: reducedMotion ? "0ms" : "1400ms",
-            }}
-          >
-            <div
-              className="coin-face coin-front"
-              style={{
-                visibility:
-                  flipping || rotation % 360 === 0 ? "visible" : "hidden",
-              }}
-            >
-              <strong>正</strong>
-              <small>HEADS</small>
-            </div>
-            <div
-              className="coin-face coin-back"
-              style={{
-                visibility:
-                  flipping || rotation % 360 === 180 ? "visible" : "hidden",
-              }}
-            >
-              <strong>反</strong>
-              <small>TAILS</small>
-            </div>
+      <div className={`table3d table3d--coin is-${status}`}>
+        {status === "failed" ? (
+          <div className={`flat-coin ${side === "反面" ? "is-tails" : ""}`}>
+            {flipping ? "…" : side === "反面" ? "反" : "正"}
           </div>
-        </div>
+        ) : (
+          <canvas
+            ref={canvasRef}
+            role="img"
+            aria-label={flipping ? "硬币在空中翻转" : `硬币：${side}朝上`}
+          />
+        )}
       </div>
       <div
         className={`result ${result ? "has-result" : ""}`}

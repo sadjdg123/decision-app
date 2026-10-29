@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { rollDiceValues, triggerVibration } from "../utils";
 import { playStart, playWin } from "../sound";
 import { Button, Confetti, Icon, Panel } from "./UI";
+import { useScene } from "./Scene3D";
 
-const FACE_PIPS = {
+const ROLL_DURATION = 1500;
+const ROLL_STAGGER = 70;
+const IDLE_VALUES = [5, 3, 6, 2, 4, 1];
+const FLAT_PIPS = {
   1: [4],
   2: [2, 6],
   3: [2, 4, 6],
@@ -11,85 +15,44 @@ const FACE_PIPS = {
   5: [0, 2, 4, 6, 8],
   6: [0, 2, 3, 5, 6, 8],
 };
-// Faces are paired to sum to seven. Orientations are inverse to each face's transform.
-const FACES = [
-  { value: 1, transform: "translateZ(var(--dice-depth))", orientation: [0, 0] },
-  {
-    value: 2,
-    transform: "rotateY(90deg) translateZ(var(--dice-depth))",
-    orientation: [0, -90],
-  },
-  {
-    value: 3,
-    transform: "rotateX(-90deg) translateZ(var(--dice-depth))",
-    orientation: [90, 0],
-  },
-  {
-    value: 4,
-    transform: "rotateX(90deg) translateZ(var(--dice-depth))",
-    orientation: [-90, 0],
-  },
-  {
-    value: 5,
-    transform: "rotateY(-90deg) translateZ(var(--dice-depth))",
-    orientation: [0, 90],
-  },
-  {
-    value: 6,
-    transform: "rotateY(180deg) translateZ(var(--dice-depth))",
-    orientation: [0, 180],
-  },
-];
-function Dice({ pose, index, rolling, reducedMotion, value }) {
+const loadDice = () =>
+  import("../three/dice3d").then((module) => module.createDiceScene);
+
+// Shown only when the device cannot draw WebGL.
+function FlatDie({ value }) {
   return (
-    <div
-      className={`dice-object ${rolling ? "is-rolling" : ""}`}
-      role="img"
-      aria-label={rolling ? "骰子正在滚动" : `骰子 ${index + 1}：${value} 点`}
-    >
-      <div
-        className="dice-cube"
-        data-testid={`dice-cube-${index}`}
-        style={{
-          transform: `rotateX(${pose[0]}deg) rotateY(${pose[1]}deg)`,
-          transitionDuration: reducedMotion ? "0ms" : `${1050 + index * 55}ms`,
-        }}
-      >
-        {FACES.map((face) => (
-          <div
-            className="dice-face"
-            key={face.value}
-            data-face={face.value}
-            style={{ transform: face.transform }}
-          >
-            {FACE_PIPS[face.value].map((pip) => (
-              <i
-                key={pip}
-                className={`pip ${face.value === 1 ? "pip--one" : ""}`}
-                style={{
-                  gridArea: `${Math.floor(pip / 3) + 1} / ${(pip % 3) + 1}`,
-                }}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
+    <div className="flat-die" role="img" aria-label={`${value} 点`}>
+      {FLAT_PIPS[value].map((pip) => (
+        <i
+          key={pip}
+          className={value === 1 ? "is-one" : ""}
+          style={{ gridArea: `${Math.floor(pip / 3) + 1} / ${(pip % 3) + 1}` }}
+        />
+      ))}
     </div>
   );
 }
+
 export default function DicePage({ addHistory, reducedMotion }) {
   const [count, setCount] = useState(1);
-  const [values, setValues] = useState([1]);
-  const [poses, setPoses] = useState([[0, 0]]);
+  const [values, setValues] = useState(IDLE_VALUES.slice(0, 1));
   const [rolling, setRolling] = useState(false);
   const [hasResult, setHasResult] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const timers = useRef([]);
   const busy = useRef(false);
+  const { canvasRef, sceneRef, status } = useScene(loadDice);
+
   useEffect(() => {
     const handles = timers.current;
     return () => handles.forEach(window.clearTimeout);
   }, []);
+  // Lay the dice out whenever the scene appears or the number of dice changes.
+  useEffect(() => {
+    if (status === "ready") sceneRef.current.layout(values);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, count]);
+
   const roll = () => {
     if (busy.current) return;
     busy.current = true;
@@ -99,48 +62,42 @@ export default function DicePage({ addHistory, reducedMotion }) {
     timers.current.forEach(window.clearTimeout);
     timers.current.length = 0;
     const nextValues = rollDiceValues(count);
-    setPoses((current) =>
-      nextValues.map((value, i) => {
-        const [x, y] = FACES[value - 1].orientation;
-        return [
-          (Math.floor((current[i]?.[0] || 0) / 360) + 3) * 360 + x,
-          (Math.floor((current[i]?.[1] || 0) / 360) + 4) * 360 + y,
-        ];
-      }),
-    );
+    const duration = reducedMotion
+      ? 100
+      : ROLL_DURATION + (count - 1) * ROLL_STAGGER;
+    if (reducedMotion) sceneRef.current?.layout(nextValues);
+    else
+      sceneRef.current?.roll(nextValues, {
+        duration: ROLL_DURATION,
+        stagger: ROLL_STAGGER,
+      });
     playStart();
     triggerVibration(25);
     timers.current.push(
-      window.setTimeout(
-        () => {
-          const total = nextValues.reduce((sum, n) => sum + n, 0);
-          setValues(nextValues);
-          setRolling(false);
-          busy.current = false;
-          setHasResult(true);
-          setCelebrating(true);
-          addHistory(
-            "掷骰子",
-            count === 1
-              ? String(total)
-              : `${nextValues.join(" + ")} = ${total}`,
-          );
-          playWin();
-          triggerVibration([30, 40, 30]);
-          timers.current.push(
-            window.setTimeout(() => setCelebrating(false), 1600),
-          );
-        },
-        reducedMotion ? 100 : 1050 + (count - 1) * 55,
-      ),
+      window.setTimeout(() => {
+        const total = nextValues.reduce((sum, n) => sum + n, 0);
+        setValues(nextValues);
+        setRolling(false);
+        busy.current = false;
+        setHasResult(true);
+        setCelebrating(true);
+        addHistory(
+          "掷骰子",
+          count === 1 ? String(total) : `${nextValues.join(" + ")} = ${total}`,
+        );
+        playWin();
+        triggerVibration([30, 40, 30]);
+        timers.current.push(
+          window.setTimeout(() => setCelebrating(false), 1600),
+        );
+      }, duration),
     );
   };
   const changeCount = (delta) => {
     if (busy.current) return;
     const next = Math.max(1, Math.min(6, count + delta));
     setCount(next);
-    setValues(Array(next).fill(1));
-    setPoses(Array.from({ length: next }, () => [0, 0]));
+    setValues(IDLE_VALUES.slice(0, next));
     setHasResult(false);
     setCelebrating(false);
   };
@@ -174,17 +131,22 @@ export default function DicePage({ addHistory, reducedMotion }) {
           +
         </button>
       </div>
-      <div className="dice-stage">
-        {poses.map((pose, i) => (
-          <Dice
-            key={i}
-            pose={pose}
-            index={i}
-            rolling={rolling}
-            reducedMotion={reducedMotion}
-            value={values[i]}
+      <div className={`table3d table3d--dice is-${status}`}>
+        {status === "failed" ? (
+          <div className="flat-dice">
+            {values.map((value, i) => (
+              <FlatDie key={i} value={value} />
+            ))}
+          </div>
+        ) : (
+          <canvas
+            ref={canvasRef}
+            role="img"
+            aria-label={
+              rolling ? "骰子正在滚动" : `骰子：${values.join("、")} 点`
+            }
           />
-        ))}
+        )}
       </div>
       <div
         className={`result ${hasResult ? "has-result" : ""}`}

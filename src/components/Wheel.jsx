@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useRef } from "react";
 import { SPIN_DURATION, wheelColor } from "../constants";
 import { mod360, totalWeight, triggerVibration } from "../utils";
 import { playTick } from "../sound";
@@ -6,7 +6,6 @@ import { playTick } from "../sound";
 const C = 200;
 const R = 186;
 const HUB = 50;
-const LIGHTS = 48;
 
 function point(angle, radius) {
   const radians = (angle * Math.PI) / 180;
@@ -67,6 +66,7 @@ export default function Wheel({
     segmentsRef.current = segments;
   });
   const showWinner = Boolean(selected) && !spinning;
+  const id = useId().replace(/:/g, "");
 
   // Drive the spin frame by frame so the pointer can flick at every slice boundary.
   useEffect(() => {
@@ -110,32 +110,33 @@ export default function Wheel({
     <div
       className={`wheel ${spinning ? "is-spinning" : ""} ${justStopped ? "is-winner" : ""}`}
     >
-      <div className="wheel-glow" aria-hidden="true" />
+      <div className="wheel-shadow" aria-hidden="true" />
       <svg className="wheel-frame" viewBox="0 0 400 400" aria-hidden="true">
         <defs>
-          <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#f4e6cc" />
-            <stop offset=".5" stopColor="#bfa07a" />
-            <stop offset="1" stopColor="#6e5940" />
+          <linearGradient id={`${id}-bezel`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#f6ead3" />
+            <stop offset=".35" stopColor="#c7a97e" />
+            <stop offset=".6" stopColor="#f0e0c2" />
+            <stop offset="1" stopColor="#6f5a40" />
+          </linearGradient>
+          <linearGradient id={`${id}-bezel-in`} x1="1" y1="1" x2="0" y2="0">
+            <stop offset="0" stopColor="#f2e2c4" />
+            <stop offset="1" stopColor="#5c4a35" />
           </linearGradient>
         </defs>
-        <circle cx={C} cy={C} r="199" fill="url(#rim)" />
-        <circle cx={C} cy={C} r="196" fill="#151517" />
-        {Array.from({ length: LIGHTS }, (_, i) => {
-          const [x, y] = point((i * 360) / LIGHTS, 185);
-          return (
-            <circle
-              key={i}
-              className={`bulb ${i % 2 ? "bulb--odd" : ""}`}
-              cx={x}
-              cy={y}
-              r={i % 4 ? 1.4 : 2.4}
-            />
-          );
-        })}
+        <circle cx={C} cy={C} r="199" fill={`url(#${id}-bezel)`} />
+        <circle cx={C} cy={C} r="191" fill={`url(#${id}-bezel-in)`} />
+        <circle cx={C} cy={C} r="188.5" fill="#0c0c0e" />
       </svg>
       <div className="wheel-disc" ref={discRef}>
         <svg viewBox="0 0 400 400" aria-hidden="true">
+          <defs>
+            <radialGradient id={`${id}-peg`} cx=".35" cy=".3" r=".8">
+              <stop offset="0" stopColor="#fff8ea" />
+              <stop offset=".5" stopColor="#cfb284" />
+              <stop offset="1" stopColor="#5f4c35" />
+            </radialGradient>
+          </defs>
           {segments.length ? (
             segments.map((segment, index) => {
               const label = fitLabel(segment.name, segment.size);
@@ -151,13 +152,10 @@ export default function Wheel({
                   <path
                     d={slicePath(segment.start, segment.size)}
                     fill={segment.color}
-                    stroke="#151517"
-                    strokeWidth={segments.length > 1 ? 1.5 : 0}
-                    strokeLinejoin="round"
                   />
                   {label.fontSize >= 9 && (
                     <text
-                      x={flip ? C - R + 18 : C + R - 18}
+                      x={flip ? C - R + 22 : C + R - 22}
                       y={C}
                       transform={`rotate(${flip ? center + 90 : center - 90} ${C} ${C})`}
                       textAnchor={flip ? "start" : "end"}
@@ -173,27 +171,69 @@ export default function Wheel({
           ) : (
             <circle cx={C} cy={C} r={R} fill="#26262b" />
           )}
-          <circle
-            cx={C}
-            cy={C}
-            r={R}
-            fill="none"
-            stroke="#ffffff"
-            strokeOpacity=".12"
-            strokeWidth="1.5"
-          />
+          {segments.length > 1 &&
+            segments.map((segment) => {
+              const [x1, y1] = point(segment.start, HUB + 4);
+              const [x2, y2] = point(segment.start, R);
+              return (
+                <line
+                  key={`d${segment.start}`}
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
+                  className="divider"
+                />
+              );
+            })}
+          <circle cx={C} cy={C} r={R - 0.5} className="disc-edge" />
+          {segments.length > 1 &&
+            segments.map((segment) => {
+              const [x, y] = point(segment.start, R - 7);
+              return (
+                <circle
+                  key={`p${segment.start}`}
+                  cx={x}
+                  cy={y}
+                  r="4.2"
+                  fill={`url(#${id}-peg)`}
+                  className="peg"
+                />
+              );
+            })}
         </svg>
       </div>
+      <svg className="wheel-light" viewBox="0 0 400 400" aria-hidden="true">
+        <defs>
+          <radialGradient id={`${id}-shade`} cx=".5" cy=".5" r=".5">
+            <stop offset=".62" stopColor="#000" stopOpacity="0" />
+            <stop offset="1" stopColor="#000" stopOpacity=".38" />
+          </radialGradient>
+          <radialGradient id={`${id}-shine`} cx=".3" cy=".18" r=".75">
+            <stop offset="0" stopColor="#fff" stopOpacity=".26" />
+            <stop offset=".55" stopColor="#fff" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle cx={C} cy={C} r="187" fill={`url(#${id}-shade)`} />
+        <circle cx={C} cy={C} r="187" fill={`url(#${id}-shine)`} />
+      </svg>
       <div className="wheel-pointer" ref={pointerRef} aria-hidden="true">
-        <svg viewBox="0 0 40 52">
+        <svg viewBox="0 0 30 62">
+          <defs>
+            <linearGradient id={`${id}-flap`} x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stopColor="#8a7151" />
+              <stop offset=".45" stopColor="#f6ead3" />
+              <stop offset="1" stopColor="#a88b63" />
+            </linearGradient>
+          </defs>
           <path
-            d="M20 50 4 18a16 16 0 1 1 32 0Z"
-            fill="#efe2c8"
-            stroke="#151517"
-            strokeWidth="2.5"
-            strokeLinejoin="round"
+            d="M5.5 14a9.5 9.5 0 0 1 19 0L16.6 57.5q-1.6 3-3.2 0Z"
+            fill={`url(#${id}-flap)`}
+            stroke="#3d3123"
+            strokeWidth=".8"
           />
-          <circle cx="20" cy="17" r="5" fill="#151517" />
+          <circle cx="15" cy="14" r="4" fill="#1a1a1d" />
+          <circle cx="14" cy="13" r="1.3" fill="#fff" fillOpacity=".45" />
         </svg>
       </div>
       <button
@@ -203,7 +243,7 @@ export default function Wheel({
         disabled={!items.length || spinning}
         aria-label={spinning ? "转盘正在选择" : "开始转盘"}
       >
-        {spinning ? "···" : "GO"}
+        <span>{spinning ? "···" : "GO"}</span>
       </button>
     </div>
   );
