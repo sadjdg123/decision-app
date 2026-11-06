@@ -33,7 +33,7 @@ function FlatDie({ value }) {
   );
 }
 
-export default function DicePage({ addHistory, reducedMotion }) {
+export default function DicePage({ active, addHistory, reducedMotion }) {
   const [count, setCount] = useState(1);
   const [values, setValues] = useState(IDLE_VALUES.slice(0, 1));
   const [rolling, setRolling] = useState(false);
@@ -41,7 +41,7 @@ export default function DicePage({ addHistory, reducedMotion }) {
   const [celebrating, setCelebrating] = useState(false);
   const timers = useRef([]);
   const busy = useRef(false);
-  const { canvasRef, sceneRef, status } = useScene(loadDice);
+  const { canvasRef, sceneRef, status } = useScene(loadDice, active);
 
   useEffect(() => {
     const handles = timers.current;
@@ -132,6 +132,12 @@ export default function DicePage({ addHistory, reducedMotion }) {
         </button>
       </div>
       <div className={`table3d table3d--dice is-${status}`}>
+        {status === "loading" && (
+          <div className="table3d-loading" role="status">
+            <i aria-hidden="true" />
+            正在加载 3D…
+          </div>
+        )}
         {status === "failed" ? (
           <div className="flat-dice">
             {values.map((value, i) => (
@@ -170,10 +176,10 @@ export default function DicePage({ addHistory, reducedMotion }) {
       </div>
       <Button
         onClick={roll}
-        disabled={rolling}
+        disabled={rolling || status === "loading"}
         className="action-main solo-action"
       >
-        {rolling ? "等待落定…" : "掷骰子"}
+        {rolling ? "等待落定…" : status === "loading" ? "加载中…" : "掷骰子"}
         <Icon name="arrow" />
       </Button>
       <p className="footnote">1–6 个骰子 · 每面等概率 · 落定后自动记录</p>

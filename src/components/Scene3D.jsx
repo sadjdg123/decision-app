@@ -1,30 +1,34 @@
 import { useEffect, useRef, useState } from "react";
 import { supportsWebGL } from "../three/support";
 
-// Loads a three.js scene lazily into a canvas; `load` must resolve to a create(canvas) function.
-export function useScene(load) {
+// Loads a three.js scene into a canvas the first time `enabled` is true;
+// `load` must resolve to a create(canvas) function.
+export function useScene(load, enabled) {
   const canvasRef = useRef(null);
   const sceneRef = useRef(null);
+  const started = useRef(false);
+  const alive = useRef(true);
   const [status, setStatus] = useState(() =>
     supportsWebGL() ? "loading" : "failed",
   );
   useEffect(() => {
-    if (status === "failed") return undefined;
-    let disposed = false;
+    if (!enabled || started.current || status === "failed") return;
+    started.current = true;
     load()
       .then((create) => {
-        if (disposed) return;
+        if (!alive.current) return;
         sceneRef.current = create(canvasRef.current);
         setStatus("ready");
       })
-      .catch(() => !disposed && setStatus("failed"));
+      .catch(() => alive.current && setStatus("failed"));
+  }, [enabled, load, status]);
+  useEffect(() => {
+    alive.current = true;
     return () => {
-      disposed = true;
+      alive.current = false;
       sceneRef.current?.dispose();
       sceneRef.current = null;
     };
-    // The scene is created once per mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return { canvasRef, sceneRef, status };
 }

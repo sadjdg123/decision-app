@@ -8,7 +8,7 @@ const FLIP_DURATION = 1600;
 const loadCoin = () =>
   import("../three/coin3d").then((module) => module.createCoinScene);
 
-export default function CoinPage({ addHistory, reducedMotion }) {
+export default function CoinPage({ active, addHistory, reducedMotion }) {
   const [result, setResult] = useState("");
   const [flipping, setFlipping] = useState(false);
   const [side, setSide] = useState("正面");
@@ -18,7 +18,7 @@ export default function CoinPage({ addHistory, reducedMotion }) {
     labels[side].trim() ? `${side} · ${labels[side].trim()}` : side;
   const timers = useRef([]);
   const busy = useRef(false);
-  const { canvasRef, sceneRef, status } = useScene(loadCoin);
+  const { canvasRef, sceneRef, status } = useScene(loadCoin, active);
   useEffect(() => {
     const handles = timers.current;
     return () => handles.forEach(window.clearTimeout);
@@ -85,6 +85,12 @@ export default function CoinPage({ addHistory, reducedMotion }) {
         ))}
       </div>
       <div className={`table3d table3d--coin is-${status}`}>
+        {status === "loading" && (
+          <div className="table3d-loading" role="status">
+            <i aria-hidden="true" />
+            正在加载 3D…
+          </div>
+        )}
         {status === "failed" ? (
           <div className={`flat-coin ${side === "反面" ? "is-tails" : ""}`}>
             {flipping ? "…" : side === "反面" ? "反" : "正"}
@@ -114,10 +120,10 @@ export default function CoinPage({ addHistory, reducedMotion }) {
       </div>
       <Button
         onClick={flip}
-        disabled={flipping}
+        disabled={flipping || status === "loading"}
         className="action-main solo-action"
       >
-        {flipping ? "等待落定…" : "抛硬币"}
+        {flipping ? "等待落定…" : status === "loading" ? "加载中…" : "抛硬币"}
         <Icon name="arrow" />
       </Button>
       <p className="footnote">两面各 50% · 落定后自动记录</p>

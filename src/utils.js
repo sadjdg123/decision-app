@@ -271,3 +271,12 @@ export function runSelfTests() {
     "history should be normalized",
   );
 }
+
+// Weighted pick that skips excluded names; returns an index into `cleanItems`, or -1 when nothing is left.
+export function pickWeightedIndexExcluding(cleanItems, excluded = []) {
+  const left = cleanItems.filter((item) => !excluded.includes(item.name));
+  const index = pickWeightedIndex(left);
+  return index < 0
+    ? -1
+    : cleanItems.findIndex((item) => item.name === left[index].name);
+}

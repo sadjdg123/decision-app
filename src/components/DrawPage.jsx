@@ -3,7 +3,7 @@ import { REEL_DURATION, SPIN_DURATION } from "../constants";
 import {
   sanitizeItems,
   totalWeight,
-  pickWeightedIndex,
+  pickWeightedIndexExcluding,
   pickWeightedName,
   getFinalRotationForTarget,
   triggerVibration,
@@ -43,11 +43,17 @@ export default function DrawPage({
   const [pendingResult, setPendingResult] = useState(null);
   const [justStopped, setJustStopped] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  // "No repeats": names already drawn this round sit out until everyone has had a turn.
+  const [noRepeat, setNoRepeat] = useState(false);
+  const [drawn, setDrawn] = useState([]);
   const timers = useRef([]);
   const busy = useRef(false);
   const cleanItems = useMemo(() => sanitizeItems(items), [items]);
   const weightTotal = totalWeight(cleanItems);
   const isDirty = JSON.stringify(cleanItems) !== savedSnapshot;
+  const excluded = noRepeat ? drawn : [];
+  const remaining = cleanItems.filter((item) => !excluded.includes(item.name));
+  const exhausted = noRepeat && cleanItems.length > 0 && !remaining.length;
 
   useEffect(() => {
     const handles = timers.current;
@@ -61,6 +67,7 @@ export default function DrawPage({
     busy.current = false;
     setSpinning(false);
     setSelected(result);
+    setDrawn((names) => (names.includes(result) ? names : [...names, result]));
     setPendingResult({ type: isFood ? "吃什么" : "谁请客", result });
     setRound((n) => n + 1);
     setJustStopped(true);
@@ -70,6 +77,12 @@ export default function DrawPage({
   };
   const begin = () => {
     if (busy.current || !weightTotal) return false;
+    if (exhausted) {
+      setDrawn([]);
+      setSelected("");
+      setPendingResult(null);
+      return false;
+    }
     busy.current = true;
     timers.current.forEach(window.clearTimeout);
     timers.current = [];
@@ -83,7 +96,7 @@ export default function DrawPage({
   };
   const spin = () => {
     if (!begin()) return;
-    const target = pickWeightedIndex(cleanItems, weightTotal);
+    const target = pickWeightedIndexExcluding(cleanItems, excluded);
     const start =
       (totalWeight(cleanItems.slice(0, target)) / weightTotal) * 360;
     const size = (cleanItems[target].weight / weightTotal) * 360;
@@ -97,7 +110,8 @@ export default function DrawPage({
   };
   const reelSpin = () => {
     if (!begin()) return;
-    const result = pickWeightedName(cleanItems, weightTotal);
+    const result =
+      cleanItems[pickWeightedIndexExcluding(cleanItems, excluded)].name;
     const pick = () => pickWeightedName(cleanItems, weightTotal);
     const names = cleanItems.map((item) => item.name);
     setReel((r) => planReel(r, names, pick, result));
@@ -107,6 +121,7 @@ export default function DrawPage({
     setSelected("");
     setPendingResult(null);
     setJustStopped(false);
+    setDrawn([]);
     setReel((r) => idleReel(r));
   };
   const setEditorItems = (updater) => {
@@ -201,9 +216,20 @@ export default function DrawPage({
             <Icon name="list" size={14} />
             {activeTemplate || "未命名名单"}
           </span>
-          <span className="muted">
-            {cleanItems.length} 个选项 · 共 {weightTotal} 票
-          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={noRepeat}
+            className="switch"
+            disabled={spinning}
+            onClick={() => {
+              setNoRepeat((on) => !on);
+              setDrawn([]);
+            }}
+          >
+            <i aria-hidden="true" />
+            不重复
+          </button>
         </div>
 
         <div className="stage">
@@ -214,6 +240,7 @@ export default function DrawPage({
               selected={selected}
               rotation={rotation}
               onSpin={spin}
+              excluded={excluded}
               justStopped={justStopped}
               reducedMotion={reducedMotion}
             />
@@ -227,6 +254,21 @@ export default function DrawPage({
             />
           )}
         </div>
+
+        <p className="draw-count">
+          {noRepeat
+            ? exhausted
+              ? "全部抽过一遍了，再点一次重新开始"
+              : drawn.length
+                ? `已抽出 ${drawn.length} 个 · 还剩 ${remaining.length} 个`
+                : `不重复模式 · 抽过的不会再中，共 ${cleanItems.length} 个`
+            : `${cleanItems.length} 个选项 · 共 ${weightTotal} 票`}
+          {noRepeat && drawn.length > 0 && !spinning && !exhausted && (
+            <button type="button" onClick={() => setDrawn([])}>
+              重置
+            </button>
+          )}
+        </p>
 
         <div
           className={`result ${selected && !spinning ? "has-result" : ""}`}
@@ -263,11 +305,13 @@ export default function DrawPage({
           >
             {spinning
               ? "正在选择…"
-              : round
-                ? "再来一次"
-                : isFood
-                  ? "转一下"
-                  : "开始抽"}
+              : exhausted
+                ? "重新开始一轮"
+                : round
+                  ? "再来一次"
+                  : isFood
+                    ? "转一下"
+                    : "开始抽"}
             <Icon name="arrow" />
           </Button>
           <Button
@@ -280,7 +324,7 @@ export default function DrawPage({
           </Button>
         </div>
         <p className="footnote">
-          {round >= 4
+          {round >= 4 && !noRepeat
             ? "一直想重抽？也许你心里早有答案了。"
             : "票数越多越容易中 · 点「就它了」记入足迹"}
         </p>

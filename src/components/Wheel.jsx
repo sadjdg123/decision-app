@@ -48,6 +48,7 @@ export default function Wheel({
   selected,
   rotation,
   onSpin,
+  excluded = [],
   justStopped,
   reducedMotion,
 }) {
@@ -144,10 +145,11 @@ export default function Wheel({
               // Flip labels on the left half so they never read upside down.
               const flip = center > 180;
               const won = showWinner && segment.name === selected;
+              const out = !won && excluded.includes(segment.name);
               return (
                 <g
                   key={index}
-                  className={`slice ${showWinner ? (won ? "is-won" : "is-dim") : ""}`}
+                  className={`slice ${showWinner ? (won ? "is-won" : "is-dim") : ""} ${out ? "is-out" : ""}`}
                 >
                   <path
                     d={slicePath(segment.start, segment.size)}

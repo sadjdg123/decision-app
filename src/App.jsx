@@ -199,10 +199,18 @@ export default function App() {
           />
         </div>
         <div hidden={active !== "coin"}>
-          <CoinPage addHistory={addHistory} reducedMotion={reducedMotion} />
+          <CoinPage
+            active={active === "coin"}
+            addHistory={addHistory}
+            reducedMotion={reducedMotion}
+          />
         </div>
         <div hidden={active !== "dice"}>
-          <DicePage addHistory={addHistory} reducedMotion={reducedMotion} />
+          <DicePage
+            active={active === "dice"}
+            addHistory={addHistory}
+            reducedMotion={reducedMotion}
+          />
         </div>
         <HistoryPanel
           history={data.history}

@@ -161,3 +161,21 @@ test("slot drum keeps visible faces and lands the result on a hidden face", asyn
     reel = next;
   }
 });
+
+test("no-repeat picks skip names already drawn until none are left", async () => {
+  const { pickWeightedIndexExcluding } = await import("../src/utils.js");
+  const items = [
+    { name: "A", weight: 5 },
+    { name: "B", weight: 1 },
+    { name: "C", weight: 2 },
+  ];
+  const drawn = [];
+  for (let i = 0; i < items.length; i += 1) {
+    const index = pickWeightedIndexExcluding(items, drawn);
+    assert.ok(index >= 0);
+    assert.ok(!drawn.includes(items[index].name));
+    drawn.push(items[index].name);
+  }
+  assert.deepEqual([...drawn].sort(), ["A", "B", "C"]);
+  assert.equal(pickWeightedIndexExcluding(items, drawn), -1);
+});
